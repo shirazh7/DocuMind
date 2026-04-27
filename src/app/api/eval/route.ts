@@ -1,0 +1,81 @@
+import { generateText, stepCountIs } from "ai";
+import { DEFAULT_MODEL_ID, MODELS } from "@/lib/ai/models";
+import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
+import { documentTools } from "@/lib/ai/tools";
+
+// PRODUCTION: This endpoint should be behind authentication — only internal
+// users should be able to trigger evaluation runs, as each run costs API credits.
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  if (!process.env.AI_GATEWAY_API_KEY) {
+    return Response.json(
+      { answer: "", sources: [], latency: 0, error: "AI_GATEWAY_API_KEY is not configured. Set it in your environment variables." },
+      { status: 500 }
+    );
+  }
+
+  const { question, modelId = DEFAULT_MODEL_ID } = await req.json();
+
+  const startTime = Date.now();
+  const validModelId = modelId in MODELS ? modelId : DEFAULT_MODEL_ID;
+
+  try {
+    // Vercel AI Gateway: plain string model reference
+    const { text, steps } = await generateText({
+      model: validModelId,
+      system: SYSTEM_PROMPT,
+      prompt: question,
+      tools: documentTools,
+      stopWhen: stepCountIs(3),
+    });
+
+    const latency = Date.now() - startTime;
+
+    const sources: Array<{
+      index: number;
+      source: string;
+      section: string;
+      content: string;
+      similarity: number;
+    }> = [];
+
+    for (const step of steps) {
+      if (step.toolResults) {
+        for (const result of step.toolResults) {
+          if (
+            result.toolName === "retrieveDocuments" &&
+            result.output &&
+            typeof result.output === "object" &&
+            "results" in result.output
+          ) {
+            const output = result.output as {
+              results: typeof sources;
+              avgSimilarity: number;
+            };
+            sources.push(...output.results);
+          }
+        }
+      }
+    }
+
+    return Response.json({
+      answer: text,
+      sources,
+      latency,
+    });
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    return Response.json(
+      {
+        answer: "",
+        sources: [],
+        latency,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}
