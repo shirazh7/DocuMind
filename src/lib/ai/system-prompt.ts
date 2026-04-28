@@ -2,6 +2,14 @@
 // them in a config service so they can be updated without redeployment. Track prompt
 // changes against evaluation scores to measure impact.
 
+// The prompt enforces strict grounding: the model must cite sources and refuse
+// when context is insufficient. This is the primary defense against hallucination
+// in a RAG system. The [1], [2] citation format was chosen over inline links
+// because it's parseable by the frontend for interactive source highlighting,
+// and familiar to users from academic/reference content.
+// Rule 6 ("always call retrieveDocuments") forces tool use on every turn rather
+// than letting the model answer from parametric memory, which would defeat
+// the purpose of a grounded knowledge assistant.
 export const SYSTEM_PROMPT = `You are DocuMind, an enterprise knowledge assistant for Acme Engineering's internal documentation.
 
 RULES:

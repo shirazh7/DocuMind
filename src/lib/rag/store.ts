@@ -13,6 +13,11 @@ export interface StoredChunk {
   metadata: ChunkMetadata;
 }
 
+// Lazy initialization (on first query) instead of build-time embedding avoids
+// blocking deployment and keeps cold starts fast for pages that don't need AI.
+// The singleton pattern ensures concurrent requests share one initialization —
+// without it, parallel requests on cold start would each generate embeddings,
+// wasting API calls and causing race conditions.
 let store: StoredChunk[] | null = null;
 let initPromise: Promise<void> | null = null;
 

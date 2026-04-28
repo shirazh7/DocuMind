@@ -13,6 +13,12 @@ export interface RetrievedChunk {
   similarity: number;
 }
 
+// Top-5 retrieval gives the LLM enough context to synthesize across documents
+// without overwhelming the context window. No minimum similarity threshold is
+// applied — the confidence badge in the UI communicates retrieval quality to
+// the user, and the system prompt instructs the model to decline when context
+// is insufficient. Filtering at a hard cutoff risks dropping relevant chunks
+// that score lower due to vocabulary mismatch but still contain the answer.
 export async function retrieveRelevantChunks(
   query: string,
   topK: number = 5

@@ -13,6 +13,11 @@ export interface GroundingResult {
   correctlyDeclined?: boolean;
 }
 
+// Substring matching is a pragmatic tradeoff: it's fast, deterministic, and
+// doesn't cost API credits — important when running 21 test cases per eval.
+// The 60% pass threshold below accounts for LLMs paraphrasing expected facts
+// (e.g., "GitHub" might appear as "GitHub Enterprise" or be referenced
+// indirectly). A stricter threshold would produce false negatives.
 const DECLINE_PHRASES = [
   "don't have enough information",
   "not enough information",

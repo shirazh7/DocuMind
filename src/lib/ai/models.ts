@@ -14,6 +14,11 @@ export interface ModelConfig {
   outputPerToken: number;
 }
 
+// Two models at opposite ends of the cost/quality spectrum demonstrate the
+// tradeoff that enterprise customers care about: GPT-4.1 Nano handles 90% of
+// simple lookups at near-zero cost, while GPT-4o Mini handles complex synthesis
+// that requires reasoning across multiple document sections. In production,
+// you'd route automatically based on query complexity or user tier.
 export const MODELS: Record<string, ModelConfig> = {
   "openai/gpt-4.1-nano": {
     id: "openai/gpt-4.1-nano",

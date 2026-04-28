@@ -36,8 +36,9 @@ export async function POST(req: Request) {
 
   const validModelId = modelId in MODELS ? modelId : DEFAULT_MODEL_ID;
 
-  // Vercel AI Gateway: pass model as a plain string — the gateway routes
-  // to the correct provider automatically.
+  // stepCountIs(3) allows up to 3 LLM round-trips: the model can retrieve,
+  // analyze the results, and optionally retrieve again with a refined query.
+  // Higher values risk runaway tool loops; lower values limit multi-hop reasoning.
   const result = streamText({
     model: validModelId,
     system: SYSTEM_PROMPT,
@@ -46,6 +47,9 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(3),
   });
 
+  // toUIMessageStreamResponse sends structured parts (text, tool calls, metadata)
+  // that useChat can render incrementally. Chosen over toDataStreamResponse
+  // because it supports messageMetadata for passing cost/usage data per message.
   return result.toUIMessageStreamResponse({
     messageMetadata: ({ part }) => {
       if (part.type === "start") {

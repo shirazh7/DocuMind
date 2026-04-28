@@ -1,5 +1,11 @@
 "use client";
 
+// Sources are shown in a collapsible sidebar rather than inline beneath each
+// message. This keeps the conversation flow clean while letting users drill into
+// evidence on demand — matching how enterprise search tools (Glean, Guru) present
+// provenance. Clicking a [1] citation in a message scrolls and highlights the
+// matching source card here, creating a two-panel "claim → evidence" workflow.
+
 import { ConfidenceBadge } from "./confidence-badge";
 import { useEffect, useRef } from "react";
 

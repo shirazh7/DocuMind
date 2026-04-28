@@ -23,7 +23,10 @@ export async function POST(req: Request) {
   const validModelId = modelId in MODELS ? modelId : DEFAULT_MODEL_ID;
 
   try {
-    // Vercel AI Gateway: plain string model reference
+    // generateText (blocking) is used instead of streamText because evaluation
+    // needs the complete response to run grounding checks — streaming would
+    // require buffering the full output anyway. Each test case hits this
+    // endpoint individually so the client can show incremental progress.
     const { text, steps } = await generateText({
       model: validModelId,
       system: SYSTEM_PROMPT,

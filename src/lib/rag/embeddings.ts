@@ -8,7 +8,10 @@ import { TextChunk } from "./chunker";
 // PRODUCTION: Pin the embedding model version. If the model changes, all stored embeddings
 // must be regenerated to maintain consistency.
 
-// Vercel AI Gateway: plain string model reference — gateway routes to OpenAI automatically
+// text-embedding-3-small chosen over text-embedding-3-large: 6x cheaper with
+// only marginal accuracy loss for short-form internal docs. The 1536-dimension
+// output is sufficient for cosine similarity over a small corpus. Upgrading to
+// 3-large would matter more with 100k+ chunks where recall becomes critical.
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
