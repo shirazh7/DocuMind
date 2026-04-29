@@ -3,9 +3,28 @@ import { embedQuery } from "./embeddings";
 import { getStore } from "./store";
 import { ChunkMetadata } from "./chunker";
 
-// PRODUCTION: Implement hybrid search combining vector similarity with BM25 keyword
-// matching for better recall. Add query rewriting to expand abbreviations and fix typos.
-// Consider adding a reranking step (e.g., Cohere Rerank) after initial retrieval.
+// ── RETRIEVAL: TOP-5 COSINE SIMILARITY, NO THRESHOLD ───────────────────
+//
+// Embeds the query with the same text-embedding-3-small model through AI
+// Gateway, computes cosineSimilarity (from the AI SDK) against every
+// stored chunk, sorts descending, returns the top 5.
+//
+// Why no minimum similarity threshold: filtering out low-similarity results
+// risks returning nothing, which is a worse UX than returning something with
+// a visible trust signal. The confidence badge (green/amber/red) communicates
+// retrieval quality. The system prompt instructs the model to decline when
+// context is insufficient. The user knows when to be cautious.
+//
+// Cosine similarity is the right metric: OpenAI embeddings are normalised,
+// so cosine and dot product are equivalent. Cosine is more intuitive to
+// explain — 1.0 is identical, 0.0 is unrelated.
+//
+// PRODUCTION: Three additions for a real system:
+// 1. Hybrid search — combine vector similarity with BM25 keyword matching
+//    so terms like CLI commands or error codes that don't embed well are found.
+// 2. Query rewriting — expand the user's question into better search terms.
+// 3. Reranking — retrieve top 20, rerank to top 5 with a cross-encoder
+//    (e.g., Cohere Rerank). Retrieval gets recall, reranking gets precision.
 
 export interface RetrievedChunk {
   text: string;
@@ -13,12 +32,6 @@ export interface RetrievedChunk {
   similarity: number;
 }
 
-// Top-5 retrieval gives the LLM enough context to synthesize across documents
-// without overwhelming the context window. No minimum similarity threshold is
-// applied — the confidence badge in the UI communicates retrieval quality to
-// the user, and the system prompt instructs the model to decline when context
-// is insufficient. Filtering at a hard cutoff risks dropping relevant chunks
-// that score lower due to vocabulary mismatch but still contain the answer.
 export async function retrieveRelevantChunks(
   query: string,
   topK: number = 5

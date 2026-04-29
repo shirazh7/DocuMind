@@ -3,8 +3,17 @@ import { DEFAULT_MODEL_ID, MODELS } from "@/lib/ai/models";
 import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { documentTools } from "@/lib/ai/tools";
 
-// PRODUCTION: This endpoint should be behind authentication — only internal
-// users should be able to trigger evaluation runs, as each run costs API credits.
+// ── EVAL API: ONE TEST CASE PER REQUEST ────────────────────────────────
+//
+// Uses generateText (blocking), NOT streamText. Evaluation needs the
+// complete response to run grounding checks — streaming would require
+// buffering the full output anyway. Each test case hits this endpoint
+// individually so the client can show incremental progress.
+//
+// Extracts sources from tool results in steps to include them in the
+// eval output alongside the answer text and latency.
+//
+// PRODUCTION: Behind authentication only — each run costs API credits.
 
 export const runtime = "nodejs";
 export const maxDuration = 30;

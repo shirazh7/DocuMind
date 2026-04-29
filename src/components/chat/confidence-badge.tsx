@@ -1,11 +1,16 @@
 import { Badge } from "@/components/ui/badge";
 
-// Three-tier confidence (green/amber/red) gives users an immediate trust
-// signal without requiring them to interpret raw similarity scores.
-// text-embedding-3-small cosine similarity scores cluster in the 0.25–0.65
-// range — not 0–1 like a percentage. These thresholds were tuned empirically
-// against the eval suite: 0.45+ reliably indicates the chunk contains the
-// answer, 0.35–0.45 means partially relevant, below 0.35 is noise.
+// ── CONFIDENCE BADGE: GREEN / AMBER / RED ──────────────────────────────
+//
+// Enterprise customers need trust signals. Green means the retrieved
+// chunk reliably contains the answer. Amber means partially relevant.
+// Red means the answer may not be reliable — especially important in
+// regulated environments where hallucination has real consequences.
+//
+// text-embedding-3-small cosine similarity scores cluster in the
+// 0.25–0.65 range — NOT 0–1 like a percentage. These thresholds were
+// tuned empirically against the eval suite: 0.45+ = high, 0.35–0.45 =
+// medium, below 0.35 = low.
 const HIGH_THRESHOLD = 0.45;
 const MEDIUM_THRESHOLD = 0.35;
 

@@ -4,21 +4,21 @@ import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { documentTools } from "@/lib/ai/tools";
 import type { DocuMindMessage } from "@/lib/ai/types";
 
-// PRODUCTION: Rate limit this endpoint per user/IP using Vercel WAF or middleware.
-// PRODUCTION: Add Vercel OTEL integration for tracing request latency, token usage,
-// and tool call patterns. This data is critical for monitoring cost and quality.
-// PRODUCTION: Enforce per-request token budget (e.g., maxOutputTokens: 4096) and
-// track cumulative monthly spend per org. Alert or disable when approaching caps.
-// PRODUCTION: Wrap streamText in a try/catch to handle LLM timeouts, context window
-// overflow (HTTP 413/400), and provider outages. Return a structured error response
-// with a user-friendly message and retry-after header.
-
+// ── WHY NODE.JS, NOT EDGE ──────────────────────────────────────────────
+// The RAG pipeline uses fs.readFileSync to load markdown docs and needs
+// full Node for embedding operations. Edge would give faster TTFB but
+// can't run this workload. Knowing when NOT to use Edge matters.
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// PRODUCTION: Rate-limit per user/IP via Vercel WAF or middleware.
+// PRODUCTION: Add Vercel OTEL for tracing latency, token usage, and tool calls.
+// PRODUCTION: Enforce per-request token budget (maxOutputTokens: 4096) and
+// monthly spend caps per org — alert or disable when approaching limits.
+
 export async function POST(req: Request) {
-  // PRODUCTION: API keys are kept server-side via env vars — never expose them
-  // to the client bundle. Rotate keys regularly and scope them per environment.
+  // ── FAIL FAST ── Return a clear error if the Gateway key is missing,
+  // rather than failing cryptically deep in the embedding pipeline.
   if (!process.env.AI_GATEWAY_API_KEY) {
     return new Response(
       JSON.stringify({ error: "AI_GATEWAY_API_KEY is not configured. Set it in your environment variables." }),
@@ -31,14 +31,16 @@ export async function POST(req: Request) {
     modelId = DEFAULT_MODEL_ID,
   }: { messages: DocuMindMessage[]; modelId?: string } = await req.json();
 
-  // PRODUCTION: Validate and sanitize message content before processing.
-  // Strip HTML/script tags, enforce max message length, validate encoding.
+  // PRODUCTION: Sanitize message content — strip HTML/script tags,
+  // enforce max length, validate encoding before processing.
 
   const validModelId = modelId in MODELS ? modelId : DEFAULT_MODEL_ID;
 
-  // stepCountIs(3) allows up to 3 LLM round-trips: the model can retrieve,
-  // analyze the results, and optionally retrieve again with a refined query.
-  // Higher values risk runaway tool loops; lower values limit multi-hop reasoning.
+  // ── CORE: streamText + tool calling ──────────────────────────────────
+  // Model string goes through AI Gateway — no provider SDK needed.
+  // convertToModelMessages is the v5 pattern for UI → model message format.
+  // stepCountIs(3) enables multi-step tool use: retrieve → analyse →
+  // retrieve again with a refined query. Higher risks runaway loops.
   const result = streamText({
     model: validModelId,
     system: SYSTEM_PROMPT,
@@ -47,9 +49,12 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(3),
   });
 
-  // toUIMessageStreamResponse sends structured parts (text, tool calls, metadata)
-  // that useChat can render incrementally. Chosen over toDataStreamResponse
-  // because it supports messageMetadata for passing cost/usage data per message.
+  // ── WHY toUIMessageStreamResponse OVER toDataStreamResponse ──────────
+  // UIMessage stream sends structured parts (text, tool calls, metadata)
+  // that useChat renders incrementally. The messageMetadata callback lets
+  // us attach cost data to each message — no separate API call needed.
+  // At "start": send the model ID. At "finish": calculate cost from
+  // token usage × per-model pricing and attach it to the message.
   return result.toUIMessageStreamResponse({
     messageMetadata: ({ part }) => {
       if (part.type === "start") {

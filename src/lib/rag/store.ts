@@ -3,9 +3,19 @@ import { loadDocuments } from "./documents";
 import { chunkDocuments } from "./chunker";
 import { generateChunkEmbeddings } from "./embeddings";
 
-// PRODUCTION: Replace this in-memory store with a managed vector database
-// (Pinecone, Weaviate, Qdrant, or pgvector). The retrieval interface is
-// abstracted so swapping the backing store requires minimal code changes.
+// ── IN-MEMORY VECTOR STORE (SINGLETON, LAZY INIT) ──────────────────────
+//
+// Why lazy init instead of build-time: avoids blocking deployment and
+// keeps cold starts fast for pages that don't need AI (KB, architecture).
+// The first chat query pays the embedding cost (~2-3s for 5 docs).
+//
+// Why singleton: without it, parallel requests on cold start would each
+// call the embedding API independently — wasting credits and causing
+// race conditions. The initPromise pattern ensures exactly one init.
+//
+// PRODUCTION: Replace with a managed vector DB (Pinecone, Weaviate,
+// Qdrant, or pgvector). The retrieval interface (retrieveRelevantChunks)
+// is abstracted so swapping the backing store requires minimal changes.
 
 export interface StoredChunk {
   text: string;
@@ -13,11 +23,6 @@ export interface StoredChunk {
   metadata: ChunkMetadata;
 }
 
-// Lazy initialization (on first query) instead of build-time embedding avoids
-// blocking deployment and keeps cold starts fast for pages that don't need AI.
-// The singleton pattern ensures concurrent requests share one initialization —
-// without it, parallel requests on cold start would each generate embeddings,
-// wasting API calls and causing race conditions.
 let store: StoredChunk[] | null = null;
 let initPromise: Promise<void> | null = null;
 
@@ -38,7 +43,6 @@ async function initializeStore(): Promise<void> {
 export async function getStore(): Promise<StoredChunk[]> {
   if (store) return store;
 
-  // Singleton initialization — only one request pays the embedding cost
   if (!initPromise) {
     initPromise = initializeStore();
   }

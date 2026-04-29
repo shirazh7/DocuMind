@@ -1,6 +1,20 @@
-// PRODUCTION: Use a tokenizer (e.g., tiktoken) for accurate token counting
-// instead of character-based estimation. Chunk size tuning should be informed
-// by retrieval quality metrics from the evaluation suite.
+// ── CHUNKING STRATEGY ──────────────────────────────────────────────────
+//
+// Split by markdown headings first (preserving section context), then by
+// character count with paragraph/sentence boundary preference.
+//
+// ~4 chars/token is a reasonable approximation for English prose. A proper
+// tokenizer (tiktoken) would be more accurate but adds ~2MB WASM — not
+// justified for a demo with known-format documents.
+//
+// 500 tokens balances context density vs retrieval precision: too small
+// and chunks lack coherence; too large and irrelevant content dilutes
+// similarity scores. 50-token overlap prevents losing context at chunk
+// boundaries — especially mid-paragraph splits where a sentence
+// references the previous one.
+//
+// PRODUCTION: Use tiktoken for accurate token counting. Tune chunk size
+// informed by retrieval quality metrics from the evaluation suite.
 
 import { RawDocument } from "./documents";
 
@@ -16,15 +30,7 @@ export interface TextChunk {
   metadata: ChunkMetadata;
 }
 
-// ~4 chars/token is a reasonable approximation for English prose. Using a proper
-// tokenizer (tiktoken) would be more accurate but adds a ~2MB WASM dependency
-// that isn't justified for a demo with known-format documents.
 const CHARS_PER_TOKEN = 4;
-
-// 500 tokens balances context density against retrieval precision: too small and
-// chunks lack coherence, too large and irrelevant content dilutes similarity
-// scores. 50-token overlap prevents losing context at chunk boundaries —
-// especially mid-paragraph splits where a sentence references the previous one.
 const TARGET_CHUNK_TOKENS = 500;
 const OVERLAP_TOKENS = 50;
 const TARGET_CHUNK_CHARS = TARGET_CHUNK_TOKENS * CHARS_PER_TOKEN;

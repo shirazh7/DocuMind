@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// PRODUCTION: Replace this simple cookie-based auth with NextAuth / Clerk /
-// Vercel Auth for multi-user support, SSO, and session management.
+// ── AUTH MIDDLEWARE: COOKIE-BASED, ENV-GATED ───────────────────────────
+//
+// If BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD are set, every request
+// must have a valid "documind-auth" cookie (set by /api/auth/login).
+// If the env vars are absent, auth is completely skipped.
+// Login page and auth API are excluded from the check.
+//
+// PRODUCTION: Replace with NextAuth / Clerk / Vercel Auth for
+// multi-user support, SSO, and proper session management.
 
 export function middleware(req: NextRequest) {
   const username = process.env.BASIC_AUTH_USERNAME;

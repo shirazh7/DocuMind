@@ -1,8 +1,14 @@
 "use client";
 
-// PRODUCTION: Model costs should be fetched dynamically from the provider's pricing
-// API. Display accumulated session/monthly cost to admins and enforce spending limits
-// per user or team via server-side middleware before forwarding requests.
+// ── MODEL SELECTOR + COST DISPLAY ──────────────────────────────────────
+//
+// Dropdown shows available models with descriptions. After each response,
+// the estimated cost appears next to the selector — calculated server-side
+// from token usage × per-model pricing and streamed via messageMetadata.
+// No separate API call for cost data.
+//
+// PRODUCTION: Fetch costs dynamically from a pricing API. Display
+// accumulated session/monthly cost to admins. Enforce spend limits.
 
 import {
   DropdownMenu,

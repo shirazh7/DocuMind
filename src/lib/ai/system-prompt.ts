@@ -1,15 +1,25 @@
-// PRODUCTION: System prompts should be versioned and A/B tested. Consider storing
-// them in a config service so they can be updated without redeployment. Track prompt
-// changes against evaluation scores to measure impact.
+// ── SYSTEM PROMPT — 6 RULES ────────────────────────────────────────────
+//
+// Rule 1: Only answer from retrieved docs. The grounding constraint.
+// Rule 2: Cite with [1], [2] matching the tool result index. This format
+//         is parseable on the frontend — citations become clickable buttons
+//         that highlight the matching source in the panel.
+// Rule 3: Decline when context is insufficient. Explicit language so the
+//         eval suite's 3 hallucination tests can verify it.
+// Rule 4: Concise, thorough, markdown formatting.
+// Rule 5: Redirect off-topic questions.
+// Rule 6: ALWAYS call retrieveDocuments before answering. This forces
+//         tool use on every substantive query. Without it, the model
+//         might answer from training data, defeating RAG entirely.
+//
+// Iterated via the eval suite: first version didn't enforce decline
+// behaviour strongly enough — the model would hedge instead of clearly
+// declining. Tightened the language and tested against the 3 hallucination
+// test cases until it reliably declined on out-of-scope questions.
+//
+// PRODUCTION: Version and A/B test prompts. Store in a config service
+// so updates don't require redeployment. Track changes against eval scores.
 
-// The prompt enforces strict grounding: the model must cite sources and refuse
-// when context is insufficient. This is the primary defense against hallucination
-// in a RAG system. The [1], [2] citation format was chosen over inline links
-// because it's parseable by the frontend for interactive source highlighting,
-// and familiar to users from academic/reference content.
-// Rule 6 ("always call retrieveDocuments") forces tool use on every turn rather
-// than letting the model answer from parametric memory, which would defeat
-// the purpose of a grounded knowledge assistant.
 export const SYSTEM_PROMPT = `You are DocuMind, an enterprise knowledge assistant for Acme Engineering's internal documentation.
 
 RULES:

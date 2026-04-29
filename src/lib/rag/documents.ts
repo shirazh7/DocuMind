@@ -1,6 +1,11 @@
-// PRODUCTION: Load documents from a CMS, object store (S3), or database instead
-// of the filesystem. Support incremental ingestion, versioning, and access control
-// per document so different teams only see their permitted content.
+// ── DOCUMENT LOADER: FILESYSTEM-BASED ──────────────────────────────────
+//
+// Reads markdown files from src/data/docs/ using fs.readFileSync.
+// This is why the API route uses runtime = "nodejs", not Edge.
+// Title mapping is hardcoded — slugs match filenames by convention.
+//
+// PRODUCTION: Load from a CMS, S3, or database. Support incremental
+// ingestion, versioning, and per-team access control.
 
 import fs from "fs";
 import path from "path";

@@ -1,10 +1,20 @@
 "use client";
 
-// Messages are rendered as full markdown via ReactMarkdown with citation
-// injection at the paragraph level. An earlier approach split text on \n\n
-// to insert citation buttons, but that broke fenced code blocks containing
-// blank lines. The current design intercepts <p> and <li> components to
-// parse [1], [2] patterns into clickable buttons without fragmenting markdown.
+// ── MESSAGE RENDERING: MARKDOWN + INTERACTIVE CITATIONS ────────────────
+//
+// Each message iterates message.parts. Text parts go through ReactMarkdown
+// with remark-gfm. Tool invocation parts (tool-retrieveDocuments) are not
+// rendered visually — the parent (chat-interface) extracts sources from
+// them to populate the sources panel.
+//
+// Citations like [1], [2] are parsed at the <p> and <li> component level
+// and rendered as clickable buttons that highlight the matching source.
+//
+// Earlier approach split text on \n\n to inject citation buttons. That
+// broke fenced code blocks containing blank lines — the markdown parser
+// saw half a code block. Current design passes the full text to
+// ReactMarkdown and intercepts paragraph/list components to insert
+// citation buttons without fragmenting the markdown structure.
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";

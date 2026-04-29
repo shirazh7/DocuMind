@@ -1,17 +1,21 @@
 import { embed, embedMany } from "ai";
 import { TextChunk } from "./chunker";
 
-// PRODUCTION: Cache embeddings in Vercel KV or a managed vector DB (Pinecone, Weaviate)
-// to avoid re-computing on every cold start. For this demo, we use an in-memory cache
-// that's populated on first request.
+// ── EMBEDDING: text-embedding-3-small VIA AI GATEWAY ───────────────────
+//
+// Why text-embedding-3-small over text-embedding-3-large: 6x cheaper with
+// only marginal accuracy loss for short-form internal docs. 1536 dimensions
+// is sufficient for cosine similarity over a small corpus. Upgrading to
+// 3-large matters more with 100k+ chunks where recall becomes critical.
+//
+// embedMany batches in groups of 100 (OpenAI's limit per request).
+// embed handles single queries for real-time retrieval.
+//
+// PRODUCTION: Cache embeddings in Vercel KV or a managed vector DB to
+// avoid re-computing on every cold start.
+// PRODUCTION: Pin the embedding model version — if the model changes,
+// all stored embeddings must be regenerated for consistency.
 
-// PRODUCTION: Pin the embedding model version. If the model changes, all stored embeddings
-// must be regenerated to maintain consistency.
-
-// text-embedding-3-small chosen over text-embedding-3-large: 6x cheaper with
-// only marginal accuracy loss for short-form internal docs. The 1536-dimension
-// output is sufficient for cosine similarity over a small corpus. Upgrading to
-// 3-large would matter more with 100k+ chunks where recall becomes critical.
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
@@ -31,8 +35,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 }
 
 export async function embedQuery(query: string): Promise<number[]> {
-  // PRODUCTION: Sanitize query input before embedding — strip HTML tags,
-  // limit length to prevent token overflow, validate encoding.
+  // PRODUCTION: Sanitize query — strip HTML, limit length, validate encoding.
   const { embedding } = await embed({
     model: EMBEDDING_MODEL,
     value: query,

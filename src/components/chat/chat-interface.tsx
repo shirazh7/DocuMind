@@ -1,10 +1,30 @@
 "use client";
 
-// Chat state is managed via useChat with DefaultChatTransport rather than a
-// manual fetch loop. This gives us streaming, optimistic UI updates, and
-// automatic message reconciliation for free. Manual input state (useState)
-// is used instead of useChat's built-in input/handleInputChange because we
-// need to pre-fill from URL query params (?q=) when navigating from the KB.
+// ── CLIENT-SIDE CHAT ───────────────────────────────────────────────────
+// useChat from @ai-sdk/react + DefaultChatTransport from the ai package.
+// The transport is configured with the API endpoint; body includes modelId
+// from component state so the server knows which model to use.
+//
+// Input is manual useState, NOT the hook's built-in state. Why: we need
+// to pre-fill from URL query params (?q=) when navigating from the KB
+// "Ask about this" button. sendMessage({ text }) sends the message.
+//
+// Messages are consumed via message.parts — text parts go through
+// ReactMarkdown; tool invocation parts are where source data is extracted.
+// useMemo filters for parts with type === "tool-retrieveDocuments" and
+// state === "output-available" to populate the sources panel.
+//
+// Status handling: "submitted" → thinking indicator, "streaming" → cursor,
+// "error" → retry option. Stop button calls stop() during streaming.
+//
+// The type system is end-to-end: DocuMindMessage extends UIMessage<MessageMetadata>
+// so the client knows exactly what metadata shape to expect.
+// message.metadata?.estimatedCost is available after streaming completes.
+//
+// DefaultChatTransport separates the streaming protocol from the hook —
+// you could swap to WebSockets or a custom transport without changing UI code.
+//
+// PRODUCTION: Add authentication check — redirect unauthenticated users.
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -17,9 +37,6 @@ import { SuggestedQuestions } from "./suggested-questions";
 import { ModelSelector } from "./model-selector";
 import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
 import type { DocuMindMessage, MessageMetadata } from "@/lib/ai/types";
-
-// PRODUCTION: Add authentication check here — redirect unauthenticated users
-// to login. Use next-auth or Vercel Auth for session management.
 
 interface Source {
   index: number;

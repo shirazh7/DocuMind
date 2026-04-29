@@ -1,7 +1,9 @@
-// Simple credential check against env vars — no database, no session store.
-// The cookie is httpOnly (not accessible via JS) and secure in production
-// (sent only over HTTPS). 7-day expiry avoids forcing re-login during the
-// interview demo. In production, use short-lived JWTs with refresh tokens.
+// ── AUTH API: CREDENTIAL CHECK → SET COOKIE ────────────────────────────
+//
+// Validates username/password against env vars. On success, sets an
+// httpOnly cookie (not accessible via JS, secure over HTTPS in prod).
+// 7-day expiry — avoids forcing re-login during the demo.
+// PRODUCTION: Short-lived JWTs with refresh tokens.
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {

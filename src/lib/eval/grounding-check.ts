@@ -1,6 +1,23 @@
-// PRODUCTION: Replace substring matching with semantic similarity or LLM-as-judge
-// evaluation for more robust grounding checks. Consider using a dedicated eval
-// framework (e.g., Braintrust, Langsmith) for versioned, regression-tracked evals.
+// ── GROUNDING CHECK — INTENTIONALLY SIMPLE & DETERMINISTIC ─────────────
+//
+// For normal questions: takes the expectedFacts array, checks whether each
+// fact appears in the response via case-insensitive substring matching.
+// Pass threshold is 60% — accounts for the LLM paraphrasing expected facts
+// (e.g., "GitHub" might appear as "GitHub Enterprise").
+//
+// For hallucination tests: checks the response against 11 decline phrases.
+// If any decline phrase is found, the test passes.
+//
+// Trade-off: substring matching isn't as nuanced as LLM-as-judge. But it's
+// deterministic, explainable, and free. I can show an enterprise customer
+// exactly what's being tested and exactly why something passed or failed.
+// Run it 100 times, same result. No black box in the evaluation.
+//
+// PRODUCTION: Layer in LLM-as-judge using generateObject from the AI SDK —
+// a second model call assesses whether the response is grounded in the
+// retrieved chunks. The deterministic baseline stays as the foundation
+// because it's auditable. Use a framework like Braintrust or Langsmith
+// for versioned, regression-tracked evals.
 
 import type { TestCase } from "./test-cases";
 
@@ -13,11 +30,6 @@ export interface GroundingResult {
   correctlyDeclined?: boolean;
 }
 
-// Substring matching is a pragmatic tradeoff: it's fast, deterministic, and
-// doesn't cost API credits — important when running 21 test cases per eval.
-// The 60% pass threshold below accounts for LLMs paraphrasing expected facts
-// (e.g., "GitHub" might appear as "GitHub Enterprise" or be referenced
-// indirectly). A stricter threshold would produce false negatives.
 const DECLINE_PHRASES = [
   "don't have enough information",
   "not enough information",
@@ -38,7 +50,6 @@ export function checkGrounding(
 ): GroundingResult {
   const lowerAnswer = answer.toLowerCase();
 
-  // Decline test: verify the model refuses to answer
   if (testCase.shouldDecline) {
     const correctlyDeclined = DECLINE_PHRASES.some((phrase) =>
       lowerAnswer.includes(phrase.toLowerCase())
@@ -53,7 +64,6 @@ export function checkGrounding(
     };
   }
 
-  // Fact-matching test: check which expected facts appear in the response
   const matchedFacts: string[] = [];
   const missedFacts: string[] = [];
 
@@ -70,7 +80,6 @@ export function checkGrounding(
       ? matchedFacts.length / testCase.expectedFacts.length
       : 0;
 
-  // Pass if at least 60% of expected facts are present
   const passed = score >= 0.6;
 
   return {

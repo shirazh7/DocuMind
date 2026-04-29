@@ -1,8 +1,9 @@
-// Suggested questions serve two purposes: they reduce blank-page anxiety for
-// first-time users, and they double as a quick smoke test during a live demo.
-// Each question maps to a different document so clicking any of them exercises
-// the full RAG pipeline. They also match eval test cases, so the interviewer
-// can immediately see grounded, cited answers.
+// ── SUGGESTED QUESTIONS (EMPTY STATE) ──────────────────────────────────
+//
+// Each question maps to a different source document — clicking any one
+// exercises the full RAG pipeline end-to-end. They also match eval test
+// cases, so during a live demo the interviewer immediately sees a
+// grounded, cited answer. Doubles as a smoke test.
 const SUGGESTIONS = [
   {
     label: "Deployment",

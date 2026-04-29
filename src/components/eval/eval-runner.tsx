@@ -1,8 +1,19 @@
 "use client";
 
-// PRODUCTION: Restrict the eval page to admin/internal roles only — running the
-// full suite consumes significant LLM tokens. Consider server-side eval via a
-// CI pipeline (e.g., GitHub Actions) instead of exposing it in the UI.
+// ── EVALUATION RUNNER ──────────────────────────────────────────────────
+//
+// Runs 21 test cases sequentially against the RAG system. Each test hits
+// /api/eval (which uses generateText, not streamText — blocking because
+// we need the complete response to run grounding checks).
+//
+// 500ms delay between requests prevents OpenAI rate limiting.
+// Results stream in one at a time so the user sees progress.
+//
+// Summary dashboard shows: accuracy %, pass count, avg latency, and
+// category breakdown (deployment, incident-response, api-auth, etc.).
+//
+// PRODUCTION: Restrict to admin roles — each run costs API credits.
+// Move to CI pipeline (GitHub Actions) for automated regression testing.
 
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
