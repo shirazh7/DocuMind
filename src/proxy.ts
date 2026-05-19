@@ -37,6 +37,10 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|\\.well-known/workflow/).*)"],
+  // Exclude static assets, Workflow internal routes, and the Flags Explorer
+  // discovery endpoint (.well-known/vercel/flags) from auth checks.
+  // The discovery endpoint is read by the Vercel Toolbar locally and must
+  // be publicly reachable for the Explorer to list flag overrides.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|\\.well-known/).*)"],
 };
 

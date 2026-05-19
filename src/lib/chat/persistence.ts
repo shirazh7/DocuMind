@@ -1,3 +1,34 @@
+// ── CHAT PERSISTENCE: SESSION AND MESSAGE CRUD ─────────────────────────
+//
+// Stores conversation history in Neon Postgres so sessions survive page
+// refreshes, browser restarts, and serverless cold starts.
+//
+// Key design decisions:
+//
+// Replace-all write pattern: replaceChatMessages deletes all existing
+// messages for a session then re-inserts the full array in one operation.
+// This is simpler than diffing and patching individual messages — the AI SDK
+// returns the complete message list on each stream completion, so the full
+// state is always available. The UNIQUE (session_id, sort_order) constraint
+// makes the re-insert idempotent at the DB level.
+//
+// No transaction: the DELETE + INSERT is not wrapped in a transaction.
+// A crash between them would leave the session message-less until the next
+// successful stream. For a production chat system, wrap in BEGIN/COMMIT or
+// use an upsert-only approach. For this demo the window is tiny (< 1ms).
+//
+// Session title — 60 chars: enough to identify a conversation in a sidebar
+// without truncating mid-word in most cases. Derived from the first user
+// message only when title IS NULL, so manual titles (if added) are preserved.
+//
+// LIMIT 20 on listChatSessions: caps sidebar rendering cost. Users who
+// exceed 20 active sessions can still access older ones by direct URL; a
+// pagination UI is a natural next step.
+//
+// Session ownership: createChatSession and listChatSessions are scoped by
+// userId. ensureChatSession does NOT verify userId on conflict — it trusts
+// the caller (/api/chat) to have a valid session. deleteChatSession enforces
+// ownership with WHERE user_id = $userId.
 import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db/client";
 import { ensureDatabaseSchema } from "@/lib/db/schema";

@@ -2,17 +2,23 @@ import { embedQuery } from "./embeddings";
 import { searchSimilarChunks } from "./store";
 import { ChunkMetadata } from "./chunker";
 
-// ── RETRIEVAL: TOP-5 COSINE SIMILARITY, NO THRESHOLD ───────────────────
+// ── RETRIEVAL: TOP-5 COSINE SIMILARITY VIA PGVECTOR, NO THRESHOLD ──────
 //
-// Embeds the query with the same text-embedding-3-small model through AI
-// Gateway, computes cosineSimilarity (from the AI SDK) against every
-// stored chunk, sorts descending, returns the top 5.
+// Embeds the query with the same text-embedding-3-small model used at ingest
+// time (critical — mismatched models produce meaningless similarity scores),
+// then delegates to searchSimilarChunks which runs a single Postgres ORDER BY
+// cosine distance query using pgvector's <=> operator. The HNSW index makes
+// this sub-millisecond even at scale; without it, Postgres falls back to an
+// exact sequential scan which still works but is slower.
 //
 // Why no minimum similarity threshold: filtering out low-similarity results
 // risks returning nothing, which is a worse UX than returning something with
 // a visible trust signal. The confidence badge (green/amber/red) communicates
 // retrieval quality. The system prompt instructs the model to decline when
 // context is insufficient. The user knows when to be cautious.
+//
+// Why topK = 5: enough context for multi-part answers without exceeding typical
+// context window budgets or degrading answer focus. Increase for dense corpora.
 //
 // Cosine similarity is the right metric: OpenAI embeddings are normalised,
 // so cosine and dot product are equivalent. Cosine is more intuitive to

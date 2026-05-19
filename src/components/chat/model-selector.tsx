@@ -16,23 +16,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getAvailableModels } from "@/lib/ai/models";
+import { getAvailableModels, type ModelConfig } from "@/lib/ai/models";
 
 interface ModelSelectorProps {
   modelId: string;
   onModelChange: (modelId: string) => void;
   lastCost?: number | null;
   disabled?: boolean;
+  // Passed from the server component via ChatInterface; filtered by the
+  // premium-model-enabled Vercel Flag. Falls back to all models when not
+  // provided (e.g. in the eval runner, which is already flag-gated).
+  allowedModels?: ModelConfig[];
 }
-
-const models = getAvailableModels();
 
 export function ModelSelector({
   modelId,
   onModelChange,
   lastCost,
   disabled,
+  allowedModels,
 }: ModelSelectorProps) {
+  const models = allowedModels ?? getAvailableModels();
   const currentModel = models.find((m) => m.id === modelId) ?? models[0];
 
   return (

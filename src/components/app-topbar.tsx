@@ -3,6 +3,13 @@
 // Slim top bar shows the current page title derived from the pathname.
 // This avoids passing title props through layout → page → topbar and
 // keeps routing as the single source of truth for navigation state.
+//
+// "New Chat" clears the localStorage session key and reloads the page.
+// The reload forces chat-interface.tsx to re-run its session init effect,
+// which sees no persisted id, creates a new session, and starts fresh.
+// Alternative: expose a reset callback from ChatInterface via context —
+// avoided here because it couples topbar to a specific child component's
+// internal state management, which is fragile across refactors.
 
 import { usePathname } from "next/navigation";
 

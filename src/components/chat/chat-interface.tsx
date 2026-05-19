@@ -35,7 +35,7 @@ import { MessageBubble } from "./message-bubble";
 import { SourcesPanel } from "./sources-panel";
 import { SuggestedQuestions } from "./suggested-questions";
 import { ModelSelector } from "./model-selector";
-import { DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { DEFAULT_MODEL_ID, type ModelConfig } from "@/lib/ai/models";
 import type { DocuMindMessage, MessageMetadata } from "@/lib/ai/types";
 
 interface Source {
@@ -46,7 +46,11 @@ interface Source {
   similarity: number;
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  allowedModels?: ModelConfig[];
+}
+
+export function ChatInterface({ allowedModels }: ChatInterfaceProps) {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
@@ -219,6 +223,7 @@ export function ChatInterface() {
             onModelChange={setModelId}
             lastCost={lastCost}
             disabled={isActive}
+            allowedModels={allowedModels}
           />
           {currentSources.length > 0 && (
             <Button

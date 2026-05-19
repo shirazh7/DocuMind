@@ -16,6 +16,11 @@ import { randomUUID } from "crypto";
 // full Node for embedding operations. Edge would give faster TTFB but
 // can't run this workload. Knowing when NOT to use Edge matters.
 export const runtime = "nodejs";
+
+// 30s covers: DB round-trip (ensureChatSession) + rate limit check +
+// embedding the query + pgvector search + LLM streaming (TTFT ~1–3s,
+// full response ~5–20s). Increase to 60s if using a slower model or if
+// multi-step tool use regularly hits the limit in production.
 export const maxDuration = 30;
 
 // PRODUCTION: Add Vercel OTEL for tracing latency, token usage, and tool calls.
@@ -58,6 +63,12 @@ export async function POST(req: Request) {
   }
 
   const userId = await getCurrentUserId();
+
+  // Upsert the session before rate limiting so the session row exists even
+  // if the request is later rejected. This avoids a race where the client
+  // creates a session (POST /api/chat/sessions) but the first chat request
+  // gets rate-limited before ensureChatSession runs, leaving the session
+  // with no owner in a subsequent retry. The upsert is idempotent and cheap.
   await ensureChatSession(sessionId, userId);
 
   const rateLimit = await enforceChatRateLimit(userId);

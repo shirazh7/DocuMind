@@ -9,6 +9,24 @@
 //
 // Mobile: overlay with backdrop, controlled by the parent layout state
 // so the topbar hamburger can open/close it.
+//
+// Session switching uses window.location.reload() rather than router.push()
+// + setMessages() because useChat in chat-interface.tsx needs to re-run its
+// full initializeSession effect with the new localStorage id. React state
+// resets cleanly on a full navigation; trying to reset it in-place requires
+// threading a "resetSession" callback through multiple component layers.
+// The reload is instant on a warm browser (cached assets) so UX impact is low.
+//
+// Session list is fetched on every pathname change (useEffect dependency).
+// This refreshes the list when the user navigates back to /chat after
+// creating a new session elsewhere. It does NOT auto-refresh within /chat —
+// a new chat appears in the list on next reload or navigation. A WebSocket
+// or polling approach would be needed for real-time list updates.
+//
+// Optimistic delete: the session is removed from local state immediately
+// before the API call completes. There is no rollback on failure — a network
+// error leaves the item gone from the UI but present in the DB until the next
+// sidebar refresh. Acceptable for a demo; production should handle the error.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -107,6 +125,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const [kbExpanded, setKbExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(true);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/chat/sessions")
@@ -127,8 +146,14 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
     onClose();
   }
 
-  async function handleDeleteSession(e: React.MouseEvent, id: string) {
+  function handleDeleteClick(e: React.MouseEvent, id: string) {
     e.stopPropagation();
+    setPendingDelete(id);
+  }
+
+  async function handleDeleteConfirm(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    setPendingDelete(null);
     setSessions((prev) => prev.filter((s) => s.id !== id));
 
     await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" }).catch(() => null);
@@ -138,6 +163,11 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       window.localStorage.removeItem("documind-session-id");
       if (pathname === "/chat") window.location.reload();
     }
+  }
+
+  function handleDeleteCancel(e: React.MouseEvent) {
+    e.stopPropagation();
+    setPendingDelete(null);
   }
 
   const navItems = [
@@ -202,6 +232,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         className={`fixed top-0 left-0 z-50 h-full w-[228px] bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
+        onClick={() => pendingDelete && setPendingDelete(null)}
       >
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-4 h-12 border-b border-sidebar-border shrink-0">
@@ -370,28 +401,47 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                               {formatRelativeTime(session.updated_at)}
                             </span>
                           </button>
-                          <button
-                            onClick={(e) => handleDeleteSession(e, session.id)}
-                            className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:text-red-500"
-                            aria-label="Delete conversation"
-                            title="Delete conversation"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="11"
-                              height="11"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
+                          {pendingDelete === session.id ? (
+                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={(e) => handleDeleteConfirm(e, session.id)}
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                                aria-label="Confirm delete"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={handleDeleteCancel}
+                                className="text-[10px] px-1 py-0.5 rounded text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+                                aria-label="Cancel"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={(e) => handleDeleteClick(e, session.id)}
+                              className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:text-red-500"
+                              aria-label="Delete conversation"
+                              title="Delete conversation"
                             >
-                              <path d="M3 6h18" />
-                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                            </svg>
-                          </button>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M3 6h18" />
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       );
                     })}

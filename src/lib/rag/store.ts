@@ -1,3 +1,39 @@
+// ── PERSISTENT VECTOR STORE: NEON + PGVECTOR ───────────────────────────
+//
+// Replaces the original in-memory store that re-embedded all documents on
+// every cold start, burning AI Gateway tokens and adding 2–3s to the first
+// request of each new serverless instance.
+//
+// Design decisions:
+//
+// Idempotent sync: syncPersistentStore counts existing rows for the current
+// EMBEDDING_MODEL before doing any work. If rows exist it returns immediately,
+// so cold starts are instant after the first ingest. `force: true` clears only
+// rows for the current model, which safely handles model upgrades without
+// deleting data for other models.
+//
+// Upsert over insert: ON CONFLICT (source, chunk_index, embedding_model)
+// DO UPDATE lets incremental ingest update changed chunks without needing
+// to track document hashes. The triple composite key means the same source
+// can be re-chunked with a new model without touching existing model's rows.
+//
+// Per-chunk INSERTs in a loop: pgvector doesn't support multi-row vector
+// inserts efficiently in all drivers. Serial inserts are slower than a bulk
+// COPY but simple, auditable, and safe to run inside the ingest Workflow
+// step which has automatic retry. For corpora >10k chunks, switch to
+// batched unnest() or pg_bulkload.
+//
+// pgvector wire format: the driver doesn't auto-cast JS arrays to vector.
+// toPgVector produces "[1,2,3]" then appends ::vector in the query — this
+// is the standard string literal syntax pgvector accepts over HTTP.
+//
+// Distance vs similarity: pgvector's <=> is cosine distance (1 - cosine_sim).
+// We ORDER BY distance (ascending = most similar first) and return
+// 1 - distance as the similarity score so downstream code sees [0, 1].
+//
+// initPromise deduplicates concurrent calls on the same serverless instance
+// (e.g. two requests hitting a cold start simultaneously). On error the
+// promise is cleared so the next request retries rather than caching failure.
 import type { ChunkMetadata } from "./chunker";
 import { loadDocuments } from "./documents";
 import { chunkDocuments } from "./chunker";
@@ -22,6 +58,7 @@ interface SearchChunkRow {
 
 let initPromise: Promise<void> | null = null;
 
+// pgvector expects the string literal format "[1.0,2.0,...]" via the HTTP driver.
 function toPgVector(values: number[]) {
   return `[${values.join(",")}]`;
 }

@@ -1,3 +1,34 @@
+// ── DATABASE SCHEMA: RUNTIME DDL, IDEMPOTENT ───────────────────────────
+//
+// Why runtime CREATE TABLE IF NOT EXISTS instead of migration files:
+// This is an assessment project with a single developer and no existing
+// schema state to manage. Runtime DDL is simpler to operate — no migration
+// runner, no deployment dependency ordering. For a production multi-tenant
+// system, replace this with Neon Migrations or Drizzle/Prisma migrate to
+// get schema versioning, rollback, and audit history.
+//
+// Table design decisions:
+//
+// rag_chunks — vector(1536) is hardcoded for text-embedding-3-small.
+// If you change embedding models you must drop all rows for the old model
+// (handled by syncPersistentStore({ force: true })) and re-embed. Storing
+// embedding_model as a column allows multiple models to coexist during a
+// migration period. The UNIQUE (source, chunk_index, embedding_model)
+// constraint makes upsert safe for re-ingest.
+//
+// chat_messages — UNIQUE (session_id, sort_order) supports the
+// replace-all write pattern: DELETE + re-INSERT from position 0 means
+// we never need to track message deltas and order is always deterministic.
+// ON DELETE CASCADE means deleting a session also removes all its messages
+// without a separate DELETE.
+//
+// HNSW index is in a try/catch because it requires pgvector 0.5+ and the
+// pg_vector_operations extension. If it fails (e.g. Neon plan limits), the
+// retrieval query still works via exact sequential scan — just slower at scale.
+//
+// schemaInitPromise deduplicates concurrent schema checks on the same
+// serverless instance. On failure the promise is cleared so the next request
+// retries, avoiding a stuck null-that-looks-initialised bug.
 import { getDb } from "@/lib/db/client";
 
 let schemaInitPromise: Promise<void> | null = null;

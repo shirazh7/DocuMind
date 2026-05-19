@@ -1,3 +1,15 @@
+// ── WORKFLOW TRIGGER: RAG INGEST ────────────────────────────────────────
+//
+// Fire-and-forget HTTP trigger for ragIngestWorkflow. Returns the Workflow
+// run ID immediately — the actual embedding work happens asynchronously in
+// the Vercel Workflow runtime, not in this request's execution window.
+//
+// runtime = "nodejs": required by the Workflow DevKit — the start() call
+// initialises the Workflow runtime which needs full Node.js APIs.
+//
+// No auth guard: this is an internal operator endpoint. In production, add
+// a WORKFLOW_TRIGGER_SECRET check or restrict to admin roles. For a demo
+// the proxy auth cookie provides a first line of defence.
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { ragIngestWorkflow } from "@/workflows/rag-ingest";
