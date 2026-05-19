@@ -23,10 +23,10 @@ const NODE_DETAILS: Record<string, NodeDetail> = {
     ],
     sdkUsage: [
       { fn: "useChat()", purpose: "Manages chat state, message history, streaming status, and the stop() function" },
-      { fn: "DefaultChatTransport", purpose: "Configured with { api: \"/api/chat\" } — replaces the old { api, body } pattern from v4" },
-      { fn: "sendMessage()", purpose: "Sends { text } with { body: { modelId } } — replaces v4's handleSubmit" },
-      { fn: "message.parts", purpose: "Iterates part.type === \"tool-retrieveDocuments\" to extract sources (v5 pattern, not message.content)" },
-      { fn: "status", purpose: "Checks \"streaming\" | \"submitted\" | \"error\" for UI states (replaces v4's isLoading)" },
+      { fn: "DefaultChatTransport", purpose: "Configured with { api: \"/api/chat\" } for streaming Route Handler communication" },
+      { fn: "sendMessage()", purpose: "Sends { text } with { body: { modelId, sessionId } } for persisted chats" },
+      { fn: "message.parts", purpose: "Iterates part.type === \"tool-retrieveDocuments\" to extract grounded sources" },
+      { fn: "status", purpose: "Checks \"streaming\" | \"submitted\" | \"error\" for user-visible runtime states" },
     ],
     keyCode: `const { messages, sendMessage, status, stop } = useChat({
   transport: new DefaultChatTransport({
@@ -107,7 +107,7 @@ return result.toUIMessageStreamResponse({
     ],
     sdkUsage: [
       { fn: "tool()", purpose: "Wraps the tool definition with { description, inputSchema, execute }" },
-      { fn: "inputSchema", purpose: "z.object({ query: z.string() }) — v5 pattern (not 'parameters' from v4)" },
+      { fn: "inputSchema", purpose: "z.object({ query: z.string() }) for typed, validated retrieval input" },
       { fn: "execute()", purpose: "Calls retrieveRelevantChunks(query, 5), returns { results, avgSimilarity }" },
     ],
     keyCode: `export const documentTools = {
@@ -190,14 +190,15 @@ const { embedding } = await embed({
   },
   "vector-store": {
     file: "src/lib/rag/store.ts",
-    description: "In-memory singleton vector store. Lazily initialized on first request: loads docs → chunks → embeds → stores. Only one request pays the init cost.",
+    description: "Persistent Neon pgvector store. On first index it loads docs → chunks → embeds → upserts; retrieval then runs in SQL with cosine distance.",
     sdkImports: [],
     sdkUsage: [],
-    keyCode: `let store: StoredChunk[] | null = null;
-let initPromise: Promise<void> | null = null;
-
-// loadDocuments() → chunkDocuments()
-//   → generateChunkEmbeddings() → store[]`,
+    keyCode: `await sql\`
+  SELECT content, 1 - (embedding <=> $1::vector) AS similarity
+  FROM rag_chunks
+  ORDER BY embedding <=> $1::vector
+  LIMIT 5
+\`;`,
   },
   "markdown-docs": {
     file: "src/data/docs/*.md",
@@ -207,10 +208,10 @@ let initPromise: Promise<void> | null = null;
   },
   "ai-gateway": {
     file: "Vercel AI Gateway (external)",
-    description: "Model references are plain strings like \"openai/gpt-4.1-nano\". The gateway handles provider routing, API key management, and request proxying. No @ai-sdk/openai import needed.",
+    description: "Model references are plain strings like \"openai/gpt-4.1-nano\". The gateway handles provider routing, request tagging, and usage observability with no provider SDK lock-in.",
     sdkImports: [],
     sdkUsage: [
-      { fn: "AI_GATEWAY_API_KEY", purpose: "Single env var — gateway routes to OpenAI, Anthropic, etc." },
+      { fn: "Gateway Auth", purpose: "Supports AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN for provider routing" },
     ],
   },
   "gpt-nano": {
@@ -626,7 +627,7 @@ export function ArchitectureDiagram() {
                   <HArrow />
                   {n("embeddings", <IconEmbed />, "Embeddings", "text-embedding-3-small", amber)}
                   <HArrow />
-                  {n("vector-store", <IconDb />, "Vector Store", "In-memory, cosine sim", amber)}
+                  {n("vector-store", <IconDb />, "Vector Store", "Neon pgvector, persistent", amber)}
                 </div>
                 <div className="flex justify-center">
                   {n("markdown-docs", <IconFile />, "5 Markdown Documents", "Deployment, Incidents, Auth, Onboarding, DB", amber)}

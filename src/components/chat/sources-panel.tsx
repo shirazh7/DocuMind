@@ -50,21 +50,21 @@ export function SourcesPanel({
     sources.reduce((sum, s) => sum + s.similarity, 0) / sources.length;
 
   return (
-    <div className="w-80 lg:w-96 border-l border-border bg-card flex flex-col h-full overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+    <div className="w-72 lg:w-80 border-l border-border bg-background/95 backdrop-blur-sm flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Sources</h3>
+          <h3 className="text-[13px] font-semibold tracking-tight">Sources</h3>
           <ConfidenceBadge similarity={avgSimilarity} />
         </div>
         <button
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center justify-center h-6 w-6 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           aria-label="Close sources panel"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -78,34 +78,34 @@ export function SourcesPanel({
         </button>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="p-3 space-y-2.5">
+        <div className="p-3 space-y-2">
           {sources.map((source, i) => (
             <div
               key={`${source.index}-${i}`}
               ref={(el) => {
                 refs.current[source.index] = el;
               }}
-              className={`rounded-lg border p-3 transition-all duration-200 ${
+              className={`rounded-2xl border p-3 transition-all duration-200 ${
                 highlightedIndex === source.index
-                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                  : "border-border bg-background"
+                  ? "border-primary/30 bg-primary/5 ring-1 ring-primary/15 shadow-sm"
+                  : "border-border/60 bg-card hover:border-border"
               }`}
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold bg-primary text-primary-foreground">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="flex items-center justify-center h-5 w-5 rounded-full text-[9px] font-bold bg-primary/10 text-primary shrink-0">
                     {source.index}
                   </span>
-                  <span className="text-xs font-semibold text-foreground truncate">
+                  <span className="text-[12px] font-medium text-foreground truncate">
                     {source.source}
                   </span>
                 </div>
                 <ConfidenceBadge similarity={source.similarity} />
               </div>
-              <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+              <span className="text-[10px] text-muted-foreground/60 font-medium uppercase tracking-wider">
                 {source.section}
               </span>
-              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-4">
+              <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed line-clamp-4">
                 {source.content}
               </p>
             </div>

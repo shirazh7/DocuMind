@@ -1,6 +1,5 @@
-import { cosineSimilarity } from "ai";
 import { embedQuery } from "./embeddings";
-import { getStore } from "./store";
+import { searchSimilarChunks } from "./store";
 import { ChunkMetadata } from "./chunker";
 
 // ── RETRIEVAL: TOP-5 COSINE SIMILARITY, NO THRESHOLD ───────────────────
@@ -36,18 +35,6 @@ export async function retrieveRelevantChunks(
   query: string,
   topK: number = 5
 ): Promise<RetrievedChunk[]> {
-  const [queryEmbedding, store] = await Promise.all([
-    embedQuery(query),
-    getStore(),
-  ]);
-
-  const scored = store.map((chunk) => ({
-    text: chunk.text,
-    metadata: chunk.metadata,
-    similarity: cosineSimilarity(queryEmbedding, chunk.embedding),
-  }));
-
-  scored.sort((a, b) => b.similarity - a.similarity);
-
-  return scored.slice(0, topK);
+  const queryEmbedding = await embedQuery(query);
+  return searchSimilarChunks(queryEmbedding, topK);
 }

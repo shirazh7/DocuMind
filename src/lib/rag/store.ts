@@ -1,52 +1,159 @@
-import { ChunkMetadata } from "./chunker";
+import type { ChunkMetadata } from "./chunker";
 import { loadDocuments } from "./documents";
 import { chunkDocuments } from "./chunker";
-import { generateChunkEmbeddings } from "./embeddings";
-
-// ── IN-MEMORY VECTOR STORE (SINGLETON, LAZY INIT) ──────────────────────
-//
-// Why lazy init instead of build-time: avoids blocking deployment and
-// keeps cold starts fast for pages that don't need AI (KB, architecture).
-// The first chat query pays the embedding cost (~2-3s for 5 docs).
-//
-// Why singleton: without it, parallel requests on cold start would each
-// call the embedding API independently — wasting credits and causing
-// race conditions. The initPromise pattern ensures exactly one init.
-//
-// PRODUCTION: Replace with a managed vector DB (Pinecone, Weaviate,
-// Qdrant, or pgvector). The retrieval interface (retrieveRelevantChunks)
-// is abstracted so swapping the backing store requires minimal changes.
+import { EMBEDDING_MODEL, generateChunkEmbeddings } from "./embeddings";
+import { ensureDatabaseSchema } from "@/lib/db/schema";
+import { getDb } from "@/lib/db/client";
 
 export interface StoredChunk {
   text: string;
-  embedding: number[];
+  embedding?: number[];
   metadata: ChunkMetadata;
 }
 
-let store: StoredChunk[] | null = null;
+interface SearchChunkRow {
+  content: string;
+  title: string;
+  section: string;
+  source: string;
+  chunk_index: number;
+  similarity: number;
+}
+
 let initPromise: Promise<void> | null = null;
 
-async function initializeStore(): Promise<void> {
+function toPgVector(values: number[]) {
+  return `[${values.join(",")}]`;
+}
+
+export async function syncPersistentStore(options?: { force?: boolean }) {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+  const force = options?.force ?? false;
+
+  if (force) {
+    await sql`DELETE FROM rag_chunks WHERE embedding_model = ${EMBEDDING_MODEL}`;
+  } else {
+    const existing = (await sql`
+      SELECT COUNT(*)::text AS count
+      FROM rag_chunks
+      WHERE embedding_model = ${EMBEDDING_MODEL}
+    `) as { count: string }[];
+
+    if (Number(existing[0]?.count ?? "0") > 0) {
+      return;
+    }
+  }
+
   const documents = loadDocuments();
   const chunks = chunkDocuments(documents);
   const embeddedChunks = await generateChunkEmbeddings(chunks);
 
-  store = embeddedChunks.map(({ chunk, embedding }) => ({
-    text: chunk.text,
-    embedding,
-    metadata: chunk.metadata,
-  }));
+  for (const { chunk, embedding } of embeddedChunks) {
+    await sql`
+      INSERT INTO rag_chunks (
+        source,
+        title,
+        section,
+        chunk_index,
+        content,
+        embedding,
+        embedding_model,
+        updated_at
+      )
+      VALUES (
+        ${chunk.metadata.source},
+        ${chunk.metadata.title},
+        ${chunk.metadata.section},
+        ${chunk.metadata.chunkIndex},
+        ${chunk.text},
+        ${toPgVector(embedding)}::vector,
+        ${EMBEDDING_MODEL},
+        NOW()
+      )
+      ON CONFLICT (source, chunk_index, embedding_model)
+      DO UPDATE SET
+        title = EXCLUDED.title,
+        section = EXCLUDED.section,
+        content = EXCLUDED.content,
+        embedding = EXCLUDED.embedding,
+        updated_at = NOW()
+    `;
+  }
 
-  console.log(`[DocuMind] Vector store initialized with ${store.length} chunks`);
+  console.log(
+    `[DocuMind] Persistent vector store synced with ${embeddedChunks.length} chunks`
+  );
+}
+
+export async function ensurePersistentStoreReady() {
+  if (!initPromise) {
+    initPromise = syncPersistentStore().catch((error) => {
+      initPromise = null;
+      throw error;
+    });
+  }
+
+  await initPromise;
+}
+
+export async function searchSimilarChunks(
+  queryEmbedding: number[],
+  topK: number
+): Promise<{ text: string; metadata: ChunkMetadata; similarity: number }[]> {
+  await ensurePersistentStoreReady();
+  const sql = getDb();
+
+  const rows = (await sql`
+    SELECT
+      content,
+      title,
+      section,
+      source,
+      chunk_index,
+      1 - (embedding <=> ${toPgVector(queryEmbedding)}::vector) AS similarity
+    FROM rag_chunks
+    WHERE embedding_model = ${EMBEDDING_MODEL}
+    ORDER BY embedding <=> ${toPgVector(queryEmbedding)}::vector
+    LIMIT ${topK}
+  `) as SearchChunkRow[];
+
+  return rows.map((row) => ({
+    text: row.content,
+    metadata: {
+      title: row.title,
+      section: row.section,
+      source: row.source,
+      chunkIndex: row.chunk_index,
+    },
+    similarity: row.similarity,
+  }));
 }
 
 export async function getStore(): Promise<StoredChunk[]> {
-  if (store) return store;
+  await ensurePersistentStoreReady();
+  const sql = getDb();
 
-  if (!initPromise) {
-    initPromise = initializeStore();
-  }
-  await initPromise;
+  const rows = (await sql`
+    SELECT content, title, section, source, chunk_index
+    FROM rag_chunks
+    WHERE embedding_model = ${EMBEDDING_MODEL}
+    ORDER BY source ASC, chunk_index ASC
+  `) as {
+    content: string;
+    title: string;
+    section: string;
+    source: string;
+    chunk_index: number;
+  }[];
 
-  return store!;
+  return rows.map((row) => ({
+    text: row.content,
+    metadata: {
+      title: row.title,
+      section: row.section,
+      source: row.source,
+      chunkIndex: row.chunk_index,
+    },
+  }));
 }

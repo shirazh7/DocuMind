@@ -40,7 +40,7 @@ export function ModelSelector({
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-mono rounded-md border border-border bg-background hover:bg-accent transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[11px] font-mono rounded-lg border border-border/60 bg-background hover:bg-accent transition-colors disabled:opacity-50 tracking-tight"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {currentModel.name}

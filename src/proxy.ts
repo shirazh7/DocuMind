@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// ── AUTH MIDDLEWARE: COOKIE-BASED, ENV-GATED ───────────────────────────
+// ── AUTH PROXY: COOKIE-BASED, ENV-GATED ────────────────────────────────
 //
 // If BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD are set, every request
 // must have a valid "documind-auth" cookie (set by /api/auth/login).
 // If the env vars are absent, auth is completely skipped.
 // Login page and auth API are excluded from the check.
 //
-// PRODUCTION: Replace with NextAuth / Clerk / Vercel Auth for
-// multi-user support, SSO, and proper session management.
+// PRODUCTION: Replace with Clerk/Auth0/Descope for multi-user SSO and
+// granular organization-level authorization.
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const username = process.env.BASIC_AUTH_USERNAME;
   const password = process.env.BASIC_AUTH_PASSWORD;
 
@@ -21,10 +21,7 @@ export function middleware(req: NextRequest) {
 
   const { pathname } = req.nextUrl;
 
-  if (
-    pathname === "/login" ||
-    pathname.startsWith("/api/auth/")
-  ) {
+  if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
     return NextResponse.next();
   }
 
@@ -40,5 +37,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|\\.well-known/workflow/).*)"],
 };
+

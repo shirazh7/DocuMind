@@ -40,7 +40,7 @@ function renderTextWithCitations(
         <button
           key={i}
           onClick={() => onCitationClick(index)}
-          className="inline-flex items-center justify-center h-4 min-w-4 px-1 mx-0.5 rounded text-[10px] font-bold bg-primary text-primary-foreground hover:bg-primary/80 transition-colors cursor-pointer align-super"
+          className="inline-flex items-center justify-center h-[15px] min-w-[15px] px-1 mx-0.5 rounded-full text-[9px] font-semibold bg-primary/15 text-primary hover:bg-primary/25 transition-colors cursor-pointer align-super"
           title={`View source ${index}`}
         >
           {index}
@@ -53,7 +53,7 @@ function renderTextWithCitations(
 
 const markdownComponents: Components = {
   pre: ({ children }) => (
-    <pre className="bg-muted rounded-lg p-3 overflow-x-auto my-2 text-sm font-mono">
+    <pre className="bg-muted/70 rounded-xl p-3.5 overflow-x-auto my-3 text-[13px] font-mono border border-border/50">
       {children}
     </pre>
   ),
@@ -61,7 +61,7 @@ const markdownComponents: Components = {
     const isInline = !className;
     if (isInline) {
       return (
-        <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">
+        <code className="bg-muted/80 px-1.5 py-0.5 rounded-md text-[13px] font-mono border border-border/40">
           {children}
         </code>
       );
@@ -69,39 +69,39 @@ const markdownComponents: Components = {
     return <code className={className}>{children}</code>;
   },
   table: ({ children }) => (
-    <div className="overflow-x-auto my-2">
-      <table className="text-sm border-collapse w-full">{children}</table>
+    <div className="overflow-x-auto my-3 rounded-xl border border-border">
+      <table className="text-[13px] border-collapse w-full">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-border px-3 py-1.5 text-left font-semibold bg-muted text-xs">
+    <th className="border-b border-border px-3 py-2 text-left font-semibold bg-muted/50 text-xs">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border border-border px-3 py-1.5 text-sm">{children}</td>
+    <td className="border-b border-border/50 px-3 py-2 text-[13px] last:border-0">{children}</td>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc pl-5 my-1.5 space-y-0.5">{children}</ul>
+    <ul className="list-disc pl-5 my-2 space-y-1">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal pl-5 my-1.5 space-y-0.5">{children}</ol>
+    <ol className="list-decimal pl-5 my-2 space-y-1">{children}</ol>
   ),
-  li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
+  li: ({ children }) => <li className="text-[13px] leading-relaxed">{children}</li>,
   h1: ({ children }) => (
-    <h1 className="text-lg font-semibold mt-3 mb-1.5">{children}</h1>
+    <h1 className="text-[15px] font-semibold mt-4 mb-2 tracking-tight">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-base font-semibold mt-2.5 mb-1">{children}</h2>
+    <h2 className="text-[14px] font-semibold mt-3 mb-1.5 tracking-tight">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
+    <h3 className="text-[13px] font-semibold mt-2.5 mb-1 tracking-tight">{children}</h3>
   ),
-  p: ({ children }) => <p className="text-sm leading-relaxed my-1">{children}</p>,
+  p: ({ children }) => <p className="text-[13px] leading-[1.65] my-1.5">{children}</p>,
   a: ({ href, children }) => (
     <a
       href={href}
-      className="text-primary underline underline-offset-2"
+      className="text-primary underline underline-offset-2 hover:opacity-80 transition-opacity"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -116,17 +116,17 @@ export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] lg:max-w-[75%] ${
+        className={`max-w-[85%] lg:max-w-[78%] ${
           isUser
-            ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5"
-            : ""
+            ? "bg-primary text-primary-foreground rounded-[20px] rounded-br-[5px] px-4 py-2.5 shadow-sm"
+            : "w-full"
         }`}
       >
         {message.parts.map((part, i) => {
           if (part.type === "text") {
             if (isUser) {
               return (
-                <p key={i} className="text-sm leading-relaxed">
+                <p key={i} className="text-[13px] leading-relaxed">
                   {part.text}
                 </p>
               );

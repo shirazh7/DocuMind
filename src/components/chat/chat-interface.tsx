@@ -48,34 +48,96 @@ interface Source {
 
 export function ChatInterface() {
   const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") ?? "";
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
-  const [input, setInput] = useState("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
+  const [input, setInput] = useState(initialQuery);
   const [showSources, setShowSources] = useState(false);
   const [highlightedSource, setHighlightedSource] = useState<number | null>(
     null
   );
-  const [prefillHandled, setPrefillHandled] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, sendMessage, status, stop } = useChat<
+  const { messages, sendMessage, setMessages, status, stop } = useChat<
     DocuMindMessage & { metadata?: MessageMetadata }
   >({
+    id: sessionId ?? undefined,
     transport: new DefaultChatTransport({
       api: "/api/chat",
     }),
+    onError: (error) => {
+      setErrorMessage(
+        error.message.includes("429")
+          ? "Rate limit reached. Please wait a moment and retry."
+          : "Something went wrong. Please try again."
+      );
+    },
   });
 
   const isActive = status === "streaming" || status === "submitted";
 
-  // Handle ?q= query param prefill from sidebar doc clicks
   useEffect(() => {
-    const q = searchParams.get("q");
-    if (q && !prefillHandled) {
-      setPrefillHandled(true);
-      setInput(q);
-    }
-  }, [searchParams, prefillHandled]);
+    let cancelled = false;
+
+    const initializeSession = async () => {
+      try {
+        const persistedSessionId =
+          window.localStorage.getItem("documind-session-id");
+
+        let resolvedSessionId = persistedSessionId;
+        if (!resolvedSessionId) {
+          const createResponse = await fetch("/api/chat/sessions", {
+            method: "POST",
+          });
+          if (!createResponse.ok) {
+            throw new Error("Failed to create chat session");
+          }
+
+          const created = (await createResponse.json()) as { sessionId: string };
+          resolvedSessionId = created.sessionId;
+          window.localStorage.setItem("documind-session-id", resolvedSessionId);
+        }
+
+        if (cancelled) return;
+        setSessionId(resolvedSessionId);
+
+        const historyResponse = await fetch(
+          `/api/chat/sessions/${resolvedSessionId}/messages`,
+          { cache: "no-store" }
+        );
+
+        if (!historyResponse.ok) {
+          throw new Error("Failed to load persisted chat history");
+        }
+
+        const payload = (await historyResponse.json()) as {
+          messages?: DocuMindMessage[];
+        };
+
+        if (!cancelled && Array.isArray(payload.messages)) {
+          setMessages(payload.messages);
+        }
+      } catch {
+        if (!cancelled) {
+          setErrorMessage(
+            "Could not restore chat history. You can continue with a new conversation."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setSessionHydrated(true);
+        }
+      }
+    };
+
+    initializeSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [setMessages]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -111,17 +173,18 @@ export function ChatInterface() {
 
   const handleSend = useCallback(
     (text: string) => {
-      if (!text.trim() || isActive) return;
+      if (!text.trim() || isActive || !sessionId) return;
+      setErrorMessage(null);
       sendMessage(
         { text: text.trim() },
         {
-          body: { modelId },
+          body: { modelId, sessionId },
         }
       );
       setInput("");
       setHighlightedSource(null);
     },
-    [isActive, modelId, sendMessage]
+    [isActive, modelId, sendMessage, sessionId]
   );
 
   const handleCitationClick = useCallback(
@@ -150,7 +213,7 @@ export function ChatInterface() {
     <div className="flex h-full">
       <div className="flex-1 flex flex-col min-w-0">
         {/* Sub-bar: model selector + sources toggle */}
-        <div className="flex items-center justify-between px-4 py-1.5 border-b border-border/50">
+        <div className="flex items-center justify-between px-4 py-1.5 border-b border-border/50 bg-background/60 backdrop-blur-sm">
           <ModelSelector
             modelId={modelId}
             onModelChange={setModelId}
@@ -161,20 +224,19 @@ export function ChatInterface() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
               onClick={() => setShowSources(!showSources)}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
+                width="13"
+                height="13"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="mr-1"
               >
                 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
                 <path d="M14 2v4a2 2 0 0 0 2 2h4" />
@@ -186,7 +248,11 @@ export function ChatInterface() {
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
+          {!sessionHydrated ? (
+            <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+              Restoring conversation history...
+            </div>
+          ) : messages.length === 0 ? (
             <SuggestedQuestions onSelect={(q) => handleSend(q)} />
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
@@ -200,22 +266,22 @@ export function ChatInterface() {
 
               {/* Streaming indicator */}
               {status === "submitted" && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="flex justify-start pl-1">
+                  <div className="flex items-center gap-2.5 text-muted-foreground/70 text-[13px]">
                     <div className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" />
                     </div>
-                    Searching documentation...
+                    Searching documentation…
                   </div>
                 </div>
               )}
 
               {/* Streaming cursor */}
               {status === "streaming" && (
-                <div className="flex justify-start">
-                  <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse rounded-sm" />
+                <div className="flex justify-start pl-1">
+                  <span className="inline-block w-[3px] h-4 bg-primary/60 animate-pulse rounded-full" />
                 </div>
               )}
 
@@ -229,7 +295,7 @@ export function ChatInterface() {
                       <path d="m9 9 6 6" />
                     </svg>
                     <p className="text-sm text-red-700 dark:text-red-400">
-                      Something went wrong. Please try again.
+                      {errorMessage ?? "Something went wrong. Please try again."}
                     </p>
                     <Button
                       variant="outline"
@@ -255,73 +321,73 @@ export function ChatInterface() {
         </div>
 
         {/* Input bar */}
-        <div className="border-t border-border bg-card/50 backdrop-blur-sm p-4">
+        <div className="border-t border-border bg-background/80 backdrop-blur-xl px-4 pt-3 pb-4">
           <div className="max-w-3xl mx-auto">
-            <div className="relative flex items-end gap-2">
-              <div className="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask about Acme's documentation..."
-                  disabled={isActive}
-                  rows={1}
-                  className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 pr-12 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 disabled:opacity-50 transition-all"
-                  style={{ minHeight: "44px", maxHeight: "120px" }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = "auto";
-                    target.style.height =
-                      Math.min(target.scrollHeight, 120) + "px";
-                  }}
-                />
+            <div className="flex items-end gap-2 rounded-2xl border border-border bg-card shadow-sm px-3 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:border-primary/40 transition-all">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about Acme's documentation..."
+                disabled={isActive || !sessionHydrated}
+                rows={1}
+                className="flex-1 resize-none bg-transparent text-sm placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 py-1.5"
+                style={{ minHeight: "28px", maxHeight: "140px" }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = "auto";
+                  target.style.height =
+                    Math.min(target.scrollHeight, 140) + "px";
+                }}
+              />
+              <div className="shrink-0 pb-0.5">
+                {isActive ? (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg shadow-none border-border/60"
+                    onClick={stop}
+                    aria-label="Stop generating"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    className="h-8 w-8 rounded-lg shadow-sm"
+                    onClick={() => handleSend(input)}
+                    disabled={!input.trim() || !sessionHydrated}
+                    aria-label="Send message"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m5 12 7-7 7 7" />
+                      <path d="M12 19V5" />
+                    </svg>
+                  </Button>
+                )}
               </div>
-              {isActive ? (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-11 rounded-xl shrink-0"
-                  onClick={stop}
-                  aria-label="Stop generating"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <rect x="6" y="6" width="12" height="12" rx="1" />
-                  </svg>
-                </Button>
-              ) : (
-                <Button
-                  size="icon"
-                  className="h-11 w-11 rounded-xl shrink-0"
-                  onClick={() => handleSend(input)}
-                  disabled={!input.trim()}
-                  aria-label="Send message"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m5 12 7-7 7 7" />
-                    <path d="M12 19V5" />
-                  </svg>
-                </Button>
-              )}
             </div>
-            <p className="text-[10px] text-muted-foreground text-center mt-2">
-              DocuMind answers are grounded in Acme Engineering documentation. Always verify critical information.
+            <p className="text-[10px] text-muted-foreground/50 text-center mt-2">
+              Answers grounded in Acme Engineering documentation. Chat history is persisted per session.
             </p>
           </div>
         </div>

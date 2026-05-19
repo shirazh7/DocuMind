@@ -19,9 +19,15 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  if (!process.env.AI_GATEWAY_API_KEY) {
+  if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
     return Response.json(
-      { answer: "", sources: [], latency: 0, error: "AI_GATEWAY_API_KEY is not configured. Set it in your environment variables." },
+      {
+        answer: "",
+        sources: [],
+        latency: 0,
+        error:
+          "AI Gateway auth is not configured. Set AI_GATEWAY_API_KEY or pull VERCEL_OIDC_TOKEN.",
+      },
       { status: 500 }
     );
   }
@@ -42,6 +48,12 @@ export async function POST(req: Request) {
       prompt: question,
       tools: documentTools,
       stopWhen: stepCountIs(3),
+      providerOptions: {
+        gateway: {
+          user: "system:eval",
+          tags: ["feature:eval", "app:documind"],
+        },
+      },
     });
 
     const latency = Date.now() - startTime;

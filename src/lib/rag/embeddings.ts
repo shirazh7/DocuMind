@@ -16,7 +16,7 @@ import { TextChunk } from "./chunker";
 // PRODUCTION: Pin the embedding model version — if the model changes,
 // all stored embeddings must be regenerated for consistency.
 
-const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   const batchSize = 100;
@@ -27,6 +27,12 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     const { embeddings } = await embedMany({
       model: EMBEDDING_MODEL,
       values: batch,
+      providerOptions: {
+        gateway: {
+          user: "system:indexer",
+          tags: ["feature:rag-ingest", "app:documind"],
+        },
+      },
     });
     allEmbeddings.push(...embeddings);
   }
@@ -39,6 +45,12 @@ export async function embedQuery(query: string): Promise<number[]> {
   const { embedding } = await embed({
     model: EMBEDDING_MODEL,
     value: query,
+    providerOptions: {
+      gateway: {
+        user: "system:retriever",
+        tags: ["feature:rag-retrieval", "app:documind"],
+      },
+    },
   });
   return embedding;
 }

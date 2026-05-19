@@ -139,23 +139,23 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-60 bg-card border-r border-border flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${
+        className={`fixed top-0 left-0 z-50 h-full w-[228px] bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-4 h-12 border-b border-border shrink-0">
-          <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
+        <div className="flex items-center gap-2.5 px-4 h-12 border-b border-sidebar-border shrink-0">
+          <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -169,11 +169,11 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
               <path d="m2 13 10 6 10-6" />
             </svg>
           </div>
-          <span className="font-semibold text-sm tracking-tight">DocuMind</span>
+          <span className="font-semibold text-[13px] tracking-tight text-sidebar-foreground">DocuMind</span>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2">
+        <nav className="flex-1 overflow-y-auto py-3 px-2.5">
           {/* Main nav items */}
           <div className="space-y-0.5">
             {navItems.map((item) => {
@@ -185,58 +185,60 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors ${
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors duration-100 ${
                     active
-                      ? "bg-accent text-accent-foreground font-medium"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      : "text-sidebar-foreground/60 hover:bg-accent/60 hover:text-sidebar-foreground"
                   }`}
                 >
-                  {item.icon}
+                  <span className={active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}>
+                    {item.icon}
+                  </span>
                   {item.label}
                 </Link>
               );
             })}
           </div>
 
-          <Separator className="my-3" />
+          <Separator className="my-3 bg-sidebar-border" />
 
           {/* Knowledge Base section */}
           <div>
             <button
               onClick={() => setKbExpanded(!kbExpanded)}
-              className="flex items-center justify-between w-full px-2.5 py-1.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center justify-between w-full px-3 py-1.5 text-[11px] font-semibold text-sidebar-foreground/40 hover:text-sidebar-foreground/70 tracking-wider uppercase transition-colors"
             >
-              Knowledge Base
+              Documents
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="12"
-                height="12"
+                width="11"
+                height="11"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={`transition-transform duration-150 ${kbExpanded ? "rotate-180" : ""}`}
+                className={`transition-transform duration-200 ${kbExpanded ? "rotate-180" : ""}`}
               >
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
             {kbExpanded && (
-              <div className="mt-0.5 space-y-0.5">
+              <div className="mt-1 space-y-0.5">
                 {KNOWLEDGE_BASE_DOCS.map((doc) => {
                   const docActive = pathname === `/kb/${doc.slug}`;
                   return (
                     <button
                       key={doc.slug}
                       onClick={() => handleDocClick(doc.slug)}
-                      className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-xs transition-colors text-left ${
+                      className={`flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-[12px] transition-colors duration-100 text-left ${
                         docActive
-                          ? "bg-accent/70 text-foreground font-medium"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          : "text-sidebar-foreground/50 hover:bg-accent/60 hover:text-sidebar-foreground"
                       }`}
                     >
-                      <span className="shrink-0 opacity-60">
+                      <span className="shrink-0 opacity-50">
                         <DocIconSvg icon={doc.icon} />
                       </span>
                       <span className="truncate">{doc.title}</span>
@@ -249,10 +251,10 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         </nav>
 
         {/* Bottom */}
-        <div className="border-t border-border px-3 py-2.5 flex items-center justify-between shrink-0">
+        <div className="border-t border-sidebar-border px-3 py-3 flex items-center justify-between shrink-0">
           <ThemeToggle />
-          <span className="text-[10px] text-muted-foreground font-mono">
-            Vercel AI SDK
+          <span className="text-[10px] text-sidebar-foreground/30 font-mono tracking-tight">
+            AI SDK
           </span>
         </div>
       </aside>

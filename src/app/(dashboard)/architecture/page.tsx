@@ -9,8 +9,9 @@ export default function ArchitecturePage() {
             System Architecture
           </h1>
           <p className="text-sm text-muted-foreground max-w-xl">
-            End-to-end architecture of the DocuMind RAG pipeline, from user
-            input through retrieval and generation to streamed response.
+            End-to-end production architecture for DocuMind, including
+            persistent retrieval, rate limiting, and durable Workflow pipelines
+            from user request through grounded response.
           </p>
         </div>
         <ArchitectureDiagram />

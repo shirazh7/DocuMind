@@ -8,6 +8,8 @@ export type MessageMetadata = {
   totalUsage?: LanguageModelUsage;
   modelId?: string;
   estimatedCost?: number;
+  sessionId?: string;
+  requestId?: string;
 };
 
 export type DocuMindMessage = UIMessage<MessageMetadata>;

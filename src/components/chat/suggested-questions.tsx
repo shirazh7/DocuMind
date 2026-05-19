@@ -39,31 +39,31 @@ export function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-4">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-full border border-border bg-muted/50">
-          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs font-medium text-muted-foreground">
-            Knowledge base loaded
+        <div className="inline-flex items-center gap-1.5 mb-5 px-3 py-1.5 rounded-full border border-border/60 bg-background shadow-sm">
+          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[11px] font-medium text-muted-foreground tracking-tight">
+            Knowledge base ready
           </span>
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight mb-2">
+        <h2 className="text-[22px] font-semibold tracking-tight mb-2 text-foreground">
           What would you like to know?
         </h2>
-        <p className="text-muted-foreground text-sm max-w-md">
-          Ask questions about Acme Engineering&apos;s internal documentation.
-          Every answer is grounded in source documents.
+        <p className="text-muted-foreground/70 text-[13px] max-w-sm leading-relaxed">
+          Ask anything about Acme Engineering&apos;s internal docs.
+          Every answer is sourced and cited.
         </p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-[480px] w-full">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.question}
             onClick={() => onSelect(s.question)}
-            className="group text-left px-4 py-3 rounded-lg border border-border bg-card hover:bg-accent/50 hover:border-primary/20 transition-all duration-150"
+            className="group text-left px-4 py-3.5 rounded-2xl border border-border/70 bg-card hover:bg-accent/50 hover:border-primary/20 hover:shadow-sm transition-all duration-150 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
           >
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-primary/60 group-hover:text-primary/80">
+            <span className="inline-flex items-center gap-1 mb-1.5 text-[10px] font-semibold tracking-wider uppercase text-primary/60 group-hover:text-primary/80 transition-colors">
               {s.label}
             </span>
-            <p className="text-sm text-foreground mt-0.5 leading-snug">
+            <p className="text-[12.5px] text-foreground/80 leading-snug group-hover:text-foreground transition-colors">
               {s.question}
             </p>
           </button>

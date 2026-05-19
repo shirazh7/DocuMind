@@ -23,17 +23,17 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
     ?? (pathname.startsWith("/kb/") ? "Knowledge Base" : "DocuMind");
 
   return (
-    <header className="flex items-center gap-3 px-4 h-12 border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
+    <header className="flex items-center gap-3 px-4 h-12 border-b border-border bg-background/80 backdrop-blur-xl shrink-0">
       {/* Mobile hamburger */}
       <button
         onClick={onMenuToggle}
-        className="lg:hidden flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+        className="lg:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent transition-colors"
         aria-label="Toggle sidebar"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
+          width="17"
+          height="17"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -47,7 +47,7 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
         </svg>
       </button>
 
-      <h1 className="text-sm font-semibold tracking-tight">{title}</h1>
+      <h1 className="text-[13px] font-medium tracking-tight text-foreground/80">{title}</h1>
     </header>
   );
 }

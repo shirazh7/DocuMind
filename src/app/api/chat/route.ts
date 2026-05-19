@@ -3,6 +3,13 @@ import { getModelCost, DEFAULT_MODEL_ID, MODELS } from "@/lib/ai/models";
 import { SYSTEM_PROMPT } from "@/lib/ai/system-prompt";
 import { documentTools } from "@/lib/ai/tools";
 import type { DocuMindMessage } from "@/lib/ai/types";
+import { getCurrentUserId } from "@/lib/auth/user-id";
+import {
+  ensureChatSession,
+  replaceChatMessages,
+} from "@/lib/chat/persistence";
+import { enforceChatRateLimit } from "@/lib/rate-limit/chat";
+import { randomUUID } from "crypto";
 
 // ── WHY NODE.JS, NOT EDGE ──────────────────────────────────────────────
 // The RAG pipeline uses fs.readFileSync to load markdown docs and needs
@@ -11,17 +18,27 @@ import type { DocuMindMessage } from "@/lib/ai/types";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// PRODUCTION: Rate-limit per user/IP via Vercel WAF or middleware.
 // PRODUCTION: Add Vercel OTEL for tracing latency, token usage, and tool calls.
-// PRODUCTION: Enforce per-request token budget (maxOutputTokens: 4096) and
-// monthly spend caps per org — alert or disable when approaching limits.
+// PRODUCTION: Enforce per-request token budget and monthly spend caps per org.
 
 export async function POST(req: Request) {
-  // ── FAIL FAST ── Return a clear error if the Gateway key is missing,
-  // rather than failing cryptically deep in the embedding pipeline.
-  if (!process.env.AI_GATEWAY_API_KEY) {
+  // ── FAIL FAST ── Return a clear error if Gateway auth is missing.
+  if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
     return new Response(
-      JSON.stringify({ error: "AI_GATEWAY_API_KEY is not configured. Set it in your environment variables." }),
+      JSON.stringify({
+        error:
+          "AI Gateway auth is not configured. Set AI_GATEWAY_API_KEY or pull VERCEL_OIDC_TOKEN.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "DATABASE_URL is not configured. Install Neon via Vercel Marketplace and pull environment variables.",
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -29,16 +46,51 @@ export async function POST(req: Request) {
   const {
     messages,
     modelId = DEFAULT_MODEL_ID,
-  }: { messages: DocuMindMessage[]; modelId?: string } = await req.json();
+    sessionId,
+  }: { messages: DocuMindMessage[]; modelId?: string; sessionId?: string } =
+    await req.json();
+
+  if (!sessionId) {
+    return new Response(
+      JSON.stringify({ error: "sessionId is required for chat persistence." }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const userId = await getCurrentUserId();
+  await ensureChatSession(sessionId, userId);
+
+  const rateLimit = await enforceChatRateLimit(userId);
+  if (!rateLimit.success) {
+    return new Response(
+      JSON.stringify({
+        error: rateLimit.reason,
+        limit: rateLimit.limit,
+        remaining: rateLimit.remaining,
+        reset: rateLimit.reset,
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          ...(rateLimit.limit != null ? { "X-RateLimit-Limit": String(rateLimit.limit) } : {}),
+          ...(rateLimit.remaining != null
+            ? { "X-RateLimit-Remaining": String(rateLimit.remaining) }
+            : {}),
+        },
+      }
+    );
+  }
 
   // PRODUCTION: Sanitize message content — strip HTML/script tags,
   // enforce max length, validate encoding before processing.
 
   const validModelId = modelId in MODELS ? modelId : DEFAULT_MODEL_ID;
+  const requestId = randomUUID();
 
   // ── CORE: streamText + tool calling ──────────────────────────────────
   // Model string goes through AI Gateway — no provider SDK needed.
-  // convertToModelMessages is the v5 pattern for UI → model message format.
+  // convertToModelMessages maps UI messages to model messages safely.
   // stepCountIs(3) enables multi-step tool use: retrieve → analyse →
   // retrieve again with a refined query. Higher risks runaway loops.
   const result = streamText({
@@ -47,6 +99,12 @@ export async function POST(req: Request) {
     messages: await convertToModelMessages(messages),
     tools: documentTools,
     stopWhen: stepCountIs(3),
+    providerOptions: {
+      gateway: {
+        user: userId,
+        tags: ["feature:chat", "app:documind"],
+      },
+    },
   });
 
   // ── WHY toUIMessageStreamResponse OVER toDataStreamResponse ──────────
@@ -56,9 +114,13 @@ export async function POST(req: Request) {
   // At "start": send the model ID. At "finish": calculate cost from
   // token usage × per-model pricing and attach it to the message.
   return result.toUIMessageStreamResponse({
+    originalMessages: messages,
+    onFinish: async ({ messages: completeMessages }) => {
+      await replaceChatMessages(sessionId, completeMessages as DocuMindMessage[]);
+    },
     messageMetadata: ({ part }) => {
       if (part.type === "start") {
-        return { modelId: validModelId };
+        return { modelId: validModelId, sessionId, requestId };
       }
       if (part.type === "finish") {
         const cost = getModelCost(validModelId);
