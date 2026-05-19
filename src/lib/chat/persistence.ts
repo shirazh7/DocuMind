@@ -70,10 +70,13 @@ export async function replaceChatMessages(
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
+    // AI SDK may return messages with empty/undefined ids (e.g. tool-call parts);
+    // generate a stable fallback so the primary key constraint is never violated.
+    const messageId = message.id || randomUUID();
     await sql`
       INSERT INTO chat_messages (id, session_id, sort_order, role, parts, metadata)
       VALUES (
-        ${message.id},
+        ${messageId},
         ${sessionId},
         ${i},
         ${message.role},
@@ -83,11 +86,38 @@ export async function replaceChatMessages(
     `;
   }
 
-  await sql`
-    UPDATE chat_sessions
-    SET updated_at = NOW()
-    WHERE id = ${sessionId}
-  `;
+  // Derive a title from the first user message if not yet set
+  const firstUser = messages.find((m) => m.role === "user");
+  if (firstUser) {
+    const textPart = firstUser.parts.find(
+      (p): p is { type: "text"; text: string } => p.type === "text" && "text" in p
+    );
+    if (textPart) {
+      const title = textPart.text.trim().slice(0, 60) + (textPart.text.length > 60 ? "…" : "");
+      await sql`
+        UPDATE chat_sessions
+        SET title = ${title}, updated_at = NOW()
+        WHERE id = ${sessionId} AND title IS NULL
+      `;
+    } else {
+      await sql`UPDATE chat_sessions SET updated_at = NOW() WHERE id = ${sessionId}`;
+    }
+  } else {
+    await sql`UPDATE chat_sessions SET updated_at = NOW() WHERE id = ${sessionId}`;
+  }
+}
+
+export async function deleteChatSession(sessionId: string, userId: string) {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+
+  const result = (await sql`
+    DELETE FROM chat_sessions
+    WHERE id = ${sessionId} AND user_id = ${userId}
+    RETURNING id
+  `) as { id: string }[];
+
+  return result.length > 0;
 }
 
 export async function pruneStaleChatSessions(daysOld: number) {
@@ -112,11 +142,29 @@ export async function listChatSessions(userId: string) {
   await ensureDatabaseSchema();
   const sql = getDb();
 
+  // Use the stored title when available; fall back to the first user message
+  // text so pre-existing sessions with title = NULL still show meaningful labels.
   const rows = (await sql`
-    SELECT id, title, updated_at::text
-    FROM chat_sessions
-    WHERE user_id = ${userId}
-    ORDER BY updated_at DESC
+    SELECT
+      s.id,
+      COALESCE(
+        s.title,
+        LEFT(
+          (
+            SELECT cm.parts->0->>'text'
+            FROM chat_messages cm
+            WHERE cm.session_id = s.id
+              AND cm.role = 'user'
+            ORDER BY cm.sort_order ASC
+            LIMIT 1
+          ),
+          60
+        )
+      ) AS title,
+      s.updated_at::text
+    FROM chat_sessions s
+    WHERE s.user_id = ${userId}
+    ORDER BY s.updated_at DESC
     LIMIT 20
   `) as ChatSessionRow[];
 

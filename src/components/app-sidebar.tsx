@@ -12,10 +12,30 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { KNOWLEDGE_BASE_DOCS, type DocIcon } from "@/lib/constants";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
+
+interface ChatSession {
+  id: string;
+  title: string | null;
+  updated_at: string;
+}
+
+function formatRelativeTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function DocIconSvg({ icon }: { icon: DocIcon }) {
   const shared = {
@@ -85,6 +105,40 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [kbExpanded, setKbExpanded] = useState(true);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  useEffect(() => {
+    fetch("/api/chat/sessions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { sessions?: ChatSession[] } | null) => {
+        if (data?.sessions) setSessions(data.sessions);
+      })
+      .catch(() => null);
+  }, [pathname]);
+
+  function handleSessionClick(id: string) {
+    window.localStorage.setItem("documind-session-id", id);
+    if (pathname === "/chat") {
+      window.location.reload();
+    } else {
+      router.push("/chat");
+    }
+    onClose();
+  }
+
+  async function handleDeleteSession(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+
+    await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" }).catch(() => null);
+
+    const current = window.localStorage.getItem("documind-session-id");
+    if (current === id) {
+      window.localStorage.removeItem("documind-session-id");
+      if (pathname === "/chat") window.location.reload();
+    }
+  }
 
   const navItems = [
     {
@@ -248,6 +302,104 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
               </div>
             )}
           </div>
+
+          {sessions.length > 0 && (
+            <>
+              <Separator className="my-3 bg-sidebar-border" />
+
+              {/* Recent conversations section */}
+              <div>
+                <button
+                  onClick={() => setHistoryExpanded(!historyExpanded)}
+                  className="flex items-center justify-between w-full px-3 py-1.5 text-[11px] font-semibold text-sidebar-foreground/40 hover:text-sidebar-foreground/70 tracking-wider uppercase transition-colors"
+                >
+                  Recent Chats
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`transition-transform duration-200 ${historyExpanded ? "rotate-180" : ""}`}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {historyExpanded && (
+                  <div className="mt-1 space-y-0.5">
+                    {sessions.map((session) => {
+                      const currentId = typeof window !== "undefined"
+                        ? window.localStorage.getItem("documind-session-id")
+                        : null;
+                      const isActive = currentId === session.id && pathname === "/chat";
+                      return (
+                        <div
+                          key={session.id}
+                          className={`group flex items-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-[12px] transition-colors duration-100 ${
+                            isActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                              : "text-sidebar-foreground/50 hover:bg-accent/60 hover:text-sidebar-foreground"
+                          }`}
+                        >
+                          <button
+                            onClick={() => handleSessionClick(session.id)}
+                            className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="shrink-0 opacity-40"
+                            >
+                              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+                            </svg>
+                            <span className="flex-1 truncate">
+                              {session.title ?? "Untitled conversation"}
+                            </span>
+                            <span className="shrink-0 text-[10px] opacity-40 tabular-nums">
+                              {formatRelativeTime(session.updated_at)}
+                            </span>
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteSession(e, session.id)}
+                            className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:text-red-500"
+                            aria-label="Delete conversation"
+                            title="Delete conversation"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </nav>
 
         {/* Bottom */}
