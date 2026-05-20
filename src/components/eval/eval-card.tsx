@@ -1,8 +1,8 @@
 // ── EVAL CARD ──────────────────────────────────────────────────────────
 //
 // Shows the full reasoning chain: question → expected facts → actual
-// answer → which facts matched/missed. The interviewer can inspect
-// *why* a test passed or failed, not just the binary result.
+// answer → which facts matched/missed. Anyone reviewing the results can
+// inspect *why* a test passed or failed, not just the binary result.
 // Decline tests display differently — no expected facts, just checking
 // that the model refused to answer out-of-scope questions.
 

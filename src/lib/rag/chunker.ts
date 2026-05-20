@@ -5,7 +5,7 @@
 //
 // ~4 chars/token is a reasonable approximation for English prose. A proper
 // tokenizer (tiktoken) would be more accurate but adds ~2MB WASM — not
-// justified for a demo with known-format documents.
+// justified for this workload with known-format markdown documents.
 //
 // 500 tokens balances context density vs retrieval precision: too small
 // and chunks lack coherence; too large and irrelevant content dilutes
@@ -13,7 +13,7 @@
 // boundaries — especially mid-paragraph splits where a sentence
 // references the previous one.
 //
-// PRODUCTION: Use tiktoken for accurate token counting. Tune chunk size
+// TODO(production): Use tiktoken for accurate token counting. Tune chunk size
 // informed by retrieval quality metrics from the evaluation suite.
 
 import { RawDocument } from "./documents";

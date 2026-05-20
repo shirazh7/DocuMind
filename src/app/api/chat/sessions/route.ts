@@ -2,7 +2,8 @@
 //
 // GET  — returns the 20 most recently active sessions for the current user,
 //        used to populate the sidebar history list.
-// POST — creates a new empty session and returns its UUID. The client stores
+// POST — reuses the most recent empty session (no messages) when available,
+//        otherwise creates a new one, then returns its UUID. The client stores
 //        this in localStorage as "documind-session-id" and sends it with
 //        every subsequent chat request to maintain conversation continuity.
 //
@@ -16,7 +17,7 @@
 // temporary share links. Not suitable for regulated data — use signed JWTs.
 import { NextResponse } from "next/server";
 import {
-  createChatSession,
+  createOrReuseEmptyChatSession,
   listChatSessions,
 } from "@/lib/chat/persistence";
 import { getCurrentUserId } from "@/lib/auth/user-id";
@@ -40,7 +41,7 @@ export async function GET() {
 export async function POST() {
   try {
     const userId = await getCurrentUserId();
-    const sessionId = await createChatSession(userId);
+    const sessionId = await createOrReuseEmptyChatSession(userId);
     return NextResponse.json({ sessionId });
   } catch (error) {
     console.error("[DocuMind] Failed to create chat session", error);

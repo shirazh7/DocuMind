@@ -20,6 +20,11 @@
 // limit bucket — acceptable for a demo, a problem in production.
 import { cookies, headers } from "next/headers";
 
+/**
+ * Returns a stable string identifier for the current request.
+ * Format: `"user:<username>"` (cookie) or `"ip:<address>"` (fallback).
+ * Never throws. See file header for full identity strategy.
+ */
 export async function getCurrentUserId() {
   const cookieStore = await cookies();
   const authCookie = cookieStore.get("documind-auth")?.value;

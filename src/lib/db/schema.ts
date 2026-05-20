@@ -1,11 +1,11 @@
 // ── DATABASE SCHEMA: RUNTIME DDL, IDEMPOTENT ───────────────────────────
 //
 // Why runtime CREATE TABLE IF NOT EXISTS instead of migration files:
-// This is an assessment project with a single developer and no existing
-// schema state to manage. Runtime DDL is simpler to operate — no migration
-// runner, no deployment dependency ordering. For a production multi-tenant
-// system, replace this with Neon Migrations or Drizzle/Prisma migrate to
-// get schema versioning, rollback, and audit history.
+// This is a single-developer project with no existing schema state to manage.
+// Runtime DDL is simpler to operate — no migration runner, no deployment
+// dependency ordering. For a production multi-tenant system, replace this
+// with Neon Migrations or Drizzle/Prisma migrate to get schema versioning,
+// rollback, and audit history.
 //
 // Table design decisions:
 //
@@ -25,6 +25,16 @@
 // HNSW index is in a try/catch because it requires pgvector 0.5+ and the
 // pg_vector_operations extension. If it fails (e.g. Neon plan limits), the
 // retrieval query still works via exact sequential scan — just slower at scale.
+//
+// user_documents — metadata for end-user uploads stored in Vercel Blob.
+// We keep file bytes in Blob (cheap/object storage) and only operational
+// metadata in Neon (querying, ownership, indexing status).
+// status drives UI and workflow retries:
+//   pending -> processing -> ready
+//   pending/processing -> failed (with error text) on terminal ingest failure.
+// slug is unique and used by /kb/[slug] routing.
+// extracted_text stores the parsed text for binary formats (PDF/DOCX) so
+// KB detail pages can render readable content without re-parsing on each view.
 //
 // schemaInitPromise deduplicates concurrent schema checks on the same
 // serverless instance. On failure the promise is cleared so the next request
@@ -90,6 +100,35 @@ export async function ensureDatabaseSchema() {
     await sql`
       CREATE INDEX IF NOT EXISTS chat_sessions_user_updated_idx
       ON chat_sessions (user_id, updated_at DESC)
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_documents (
+        id TEXT PRIMARY KEY,
+        slug TEXT NOT NULL UNIQUE,
+        user_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        extracted_text TEXT,
+        blob_url TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+
+    await sql`
+      ALTER TABLE user_documents
+      ADD COLUMN IF NOT EXISTS extracted_text TEXT
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS user_documents_user_updated_idx
+      ON user_documents (user_id, updated_at DESC)
     `;
 
     try {

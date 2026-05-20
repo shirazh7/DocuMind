@@ -13,8 +13,11 @@
 // - A previous partial ingest left the store in an inconsistent state.
 //
 // Scheduled weekly (Sunday 4am UTC via vercel.json cron) as a safety net.
-// The idempotent nature of ingest means running it on a clean store is a
-// no-op in terms of result quality — it just re-confirms correctness.
+// IMPORTANT: this force-reindex intentionally excludes user-uploaded docs
+// (source prefix user-doc:) to avoid unbounded weekly costs as uploads grow.
+// User docs are re-embedded incrementally on upload/update workflows.
+// The idempotent nature of ingest means running it on a clean static store
+// is a no-op in terms of result quality — it just re-confirms correctness.
 import { ingestKnowledgeBase } from "@/lib/rag/ingest";
 
 async function runFullReindexStep() {

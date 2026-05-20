@@ -15,7 +15,7 @@
 // No transaction: the DELETE + INSERT is not wrapped in a transaction.
 // A crash between them would leave the session message-less until the next
 // successful stream. For a production chat system, wrap in BEGIN/COMMIT or
-// use an upsert-only approach. For this demo the window is tiny (< 1ms).
+// use an upsert-only approach. The window is tiny (< 1ms) for this workload.
 //
 // Session title — 60 chars: enough to identify a conversation in a sidebar
 // without truncating mid-word in most cases. Derived from the first user
@@ -60,6 +60,48 @@ export async function createChatSession(userId: string) {
   return sessionId;
 }
 
+/**
+ * Returns an existing empty session for the user if one exists, otherwise
+ * creates a new one. "Empty" means zero rows in chat_messages for the session.
+ * Prevents a new session being created on every "New Chat" click or page
+ * refresh before the user sends any message, which would clutter the sidebar.
+ */
+// Reuse an existing empty session when possible to avoid sidebar clutter from
+// repeated "New Chat" clicks or page refreshes before the user sends a message.
+// "Empty" means no rows in chat_messages for the session.
+export async function createOrReuseEmptyChatSession(userId: string) {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+
+  const existing = (await sql`
+    SELECT s.id
+    FROM chat_sessions s
+    LEFT JOIN chat_messages m ON m.session_id = s.id
+    WHERE s.user_id = ${userId}
+    GROUP BY s.id, s.updated_at
+    HAVING COUNT(m.id) = 0
+    ORDER BY s.updated_at DESC
+    LIMIT 1
+  `) as { id: string }[];
+
+  if (existing[0]?.id) {
+    await sql`
+      UPDATE chat_sessions
+      SET updated_at = NOW()
+      WHERE id = ${existing[0].id}
+    `;
+    return existing[0].id;
+  }
+
+  return createChatSession(userId);
+}
+
+/**
+ * Idempotent upsert of a chat session. Called before rate limiting in the
+ * chat route so the session row exists even if the request is later rejected.
+ * Subsequent calls from retries are no-ops (ON CONFLICT DO UPDATE SET
+ * updated_at only).
+ */
 export async function ensureChatSession(sessionId: string, userId: string) {
   await ensureDatabaseSchema();
   const sql = getDb();
@@ -90,6 +132,15 @@ export async function loadChatMessages(sessionId: string): Promise<DocuMindMessa
   }));
 }
 
+/**
+ * Replaces ALL messages for a session (DELETE + bulk INSERT) in a single
+ * sequential operation. Called from the chat route's `onFinish` callback
+ * with the complete UIMessage[] after the stream finishes.
+ *
+ * Also auto-derives a session title from the first user message if the
+ * session title is still NULL — so new sessions are titled on first send
+ * without a separate API call.
+ */
 export async function replaceChatMessages(
   sessionId: string,
   messages: DocuMindMessage[]
@@ -151,6 +202,11 @@ export async function deleteChatSession(sessionId: string, userId: string) {
   return result.length > 0;
 }
 
+/**
+ * Deletes chat sessions (and their messages via ON DELETE CASCADE) that have
+ * not been updated in `daysOld` days. Returns the number of sessions deleted.
+ * Called by the chat maintenance Workflow on a daily cron schedule.
+ */
 export async function pruneStaleChatSessions(daysOld: number) {
   await ensureDatabaseSchema();
   const sql = getDb();

@@ -4,9 +4,12 @@
 // This avoids passing title props through layout → page → topbar and
 // keeps routing as the single source of truth for navigation state.
 //
-// "New Chat" clears the localStorage session key and reloads the page.
-// The reload forces chat-interface.tsx to re-run its session init effect,
-// which sees no persisted id, creates a new session, and starts fresh.
+// "New Chat" clears the localStorage session key then navigates to /chat
+// with no query params. A bare reload would preserve ?q= and ?new=1 from
+// a KB "Ask about this" link, causing the auto-send effect to re-fire on
+// the fresh session. Full navigation clears the URL and forces
+// chat-interface.tsx to re-run its session init effect, see no persisted
+// id, create a new session, and start fresh.
 // Alternative: expose a reset callback from ChatInterface via context —
 // avoided here because it couples topbar to a specific child component's
 // internal state management, which is fragile across refactors.
@@ -18,6 +21,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/kb": "Knowledge Base",
   "/eval": "Evaluation Suite",
   "/architecture": "System Architecture",
+  "/platform": "Platform Capabilities",
 };
 
 interface AppTopbarProps {
@@ -31,21 +35,25 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
 
   function handleNewChat() {
     window.localStorage.removeItem("documind-session-id");
-    window.location.reload();
+    // Navigate to /chat with no query params rather than reloading the current
+    // URL. A plain reload would preserve ?q= and ?new=1 from a KB "Ask about
+    // this" navigation, causing the auto-send effect to fire again on the new
+    // empty session — sending the stale question into the fresh conversation.
+    window.location.href = "/chat";
   }
 
   return (
-    <header className="flex items-center gap-3 px-4 h-12 border-b border-border bg-background/80 backdrop-blur-xl shrink-0">
+    <header className="flex items-center gap-3 px-4 h-[52px] border-b border-border bg-background shrink-0">
       {/* Mobile hamburger */}
       <button
         onClick={onMenuToggle}
-        className="lg:hidden flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent transition-colors"
+        className="lg:hidden flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors text-foreground/60 hover:text-foreground"
         aria-label="Toggle sidebar"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="17"
-          height="17"
+          width="16"
+          height="16"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -59,12 +67,12 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
         </svg>
       </button>
 
-      <h1 className="flex-1 text-[13px] font-medium tracking-tight text-foreground/80">{title}</h1>
+      <h1 className="flex-1 text-[14px] font-medium text-foreground/70 tracking-tight">{title}</h1>
 
       {pathname === "/chat" && (
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="flex items-center gap-1.5 h-8 px-3 rounded-md text-[13px] font-medium text-foreground/60 hover:text-foreground hover:bg-accent transition-colors border border-transparent hover:border-border"
           aria-label="New chat"
           title="Start a new conversation"
         >
@@ -75,7 +83,7 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           >

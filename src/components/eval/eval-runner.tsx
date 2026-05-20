@@ -12,7 +12,7 @@
 // Summary dashboard shows: accuracy %, pass count, avg latency, and
 // category breakdown (deployment, incident-response, api-auth, etc.).
 //
-// PRODUCTION: Restrict to admin roles — each run costs API credits.
+// TODO(production): Restrict to admin roles — each run costs API credits.
 // Move to CI pipeline (GitHub Actions) for automated regression testing.
 
 import { useState, useCallback } from "react";

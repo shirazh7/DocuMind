@@ -8,7 +8,7 @@ import type { NextRequest } from "next/server";
 // If the env vars are absent, auth is completely skipped.
 // Login page and auth API are excluded from the check.
 //
-// PRODUCTION: Replace with Clerk/Auth0/Descope for multi-user SSO and
+// TODO(production): Replace with Clerk/Auth0/Descope for multi-user SSO and
 // granular organization-level authorization.
 
 export function proxy(req: NextRequest) {

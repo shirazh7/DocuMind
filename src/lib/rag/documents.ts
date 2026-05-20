@@ -4,7 +4,7 @@
 // This is why the API route uses runtime = "nodejs", not Edge.
 // Title mapping is hardcoded — slugs match filenames by convention.
 //
-// PRODUCTION: Load from a CMS, S3, or database. Support incremental
+// TODO(production): Load from a CMS, S3, or database. Support incremental
 // ingestion, versioning, and per-team access control.
 
 import fs from "fs";

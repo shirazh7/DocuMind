@@ -70,7 +70,7 @@ const markdownComponents: Components = {
   a: ({ href, children }) => (
     <a
       href={href}
-      className="text-primary underline underline-offset-2 hover:text-primary/80"
+      className="text-foreground underline underline-offset-2 decoration-foreground/30 hover:decoration-foreground transition-all"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -78,7 +78,7 @@ const markdownComponents: Components = {
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-primary/30 pl-4 my-3 text-muted-foreground italic">
+    <blockquote className="border-l-2 border-border pl-4 my-3 text-muted-foreground">
       {children}
     </blockquote>
   ),

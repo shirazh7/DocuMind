@@ -1,8 +1,8 @@
 "use client";
 
-// PRODUCTION: Guard this layout with authentication middleware (e.g., NextAuth /
+// TODO(production): Guard this layout with authentication middleware (e.g., NextAuth /
 // Clerk / Vercel Auth). Redirect unauthenticated users to a login page.
-// PRODUCTION: Inject user identity into React context here so child pages can
+// TODO(production): Inject user identity into React context here so child pages can
 // personalise content and the API routes can enforce per-user rate limits.
 
 import { useState } from "react";

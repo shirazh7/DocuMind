@@ -2,31 +2,31 @@
 //
 // Each question maps to a different source document — clicking any one
 // exercises the full RAG pipeline end-to-end. They also match eval test
-// cases, so during a live demo the interviewer immediately sees a
+// cases, so any question triggers the full RAG pipeline and returns a
 // grounded, cited answer. Doubles as a smoke test.
 const SUGGESTIONS = [
   {
-    label: "Deployment",
+    title: "Rollback a failed deployment",
     question: "What is the rollback procedure for a failed deployment?",
   },
   {
-    label: "Incidents",
+    title: "P1 incident escalation",
     question: "What is the escalation path for a P1 incident?",
   },
   {
-    label: "API Auth",
+    title: "Refresh an expired API token",
     question: "How do I refresh an expired API token?",
   },
   {
-    label: "Onboarding",
+    title: "Day one engineer setup",
     question: "What tools do new engineers need access to on day one?",
   },
   {
-    label: "Database",
+    title: "Database migration approval",
     question: "What is the approval process for database migrations?",
   },
   {
-    label: "Feature Flags",
+    title: "Managing feature flags",
     question: "How do we manage feature flags at Acme?",
   },
 ];
@@ -37,35 +37,43 @@ interface SuggestedQuestionsProps {
 
 export function SuggestedQuestions({ onSelect }: SuggestedQuestionsProps) {
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-1.5 mb-5 px-3 py-1.5 rounded-full border border-border/60 bg-background shadow-sm">
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[11px] font-medium text-muted-foreground tracking-tight">
-            Knowledge base ready
-          </span>
-        </div>
-        <h2 className="text-[22px] font-semibold tracking-tight mb-2 text-foreground">
-          What would you like to know?
+    <div className="flex flex-col items-center justify-center h-full px-6 gap-10">
+      {/* Headline */}
+      <div className="text-center space-y-2.5">
+        <h2 className="text-[26px] font-semibold tracking-tight text-foreground leading-tight">
+          What do you want to know?
         </h2>
-        <p className="text-muted-foreground/70 text-[13px] max-w-sm leading-relaxed">
-          Ask anything about Acme Engineering&apos;s internal docs.
-          Every answer is sourced and cited.
+        <p className="text-sm text-muted-foreground max-w-[300px] leading-relaxed">
+          Answers grounded in Acme Engineering docs, with sources.
         </p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-[480px] w-full">
+
+      {/* 2-column prompt grid — v0 style */}
+      <div className="grid grid-cols-2 gap-2 w-full max-w-[540px]">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.question}
             onClick={() => onSelect(s.question)}
-            className="group text-left px-4 py-3.5 rounded-2xl border border-border/70 bg-card hover:bg-accent/50 hover:border-primary/20 hover:shadow-sm transition-all duration-150 shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+            className="group flex items-start justify-between gap-3 text-left px-4 py-3.5 rounded-lg border border-border bg-background hover:bg-muted hover:border-foreground/20 transition-all duration-100"
           >
-            <span className="inline-flex items-center gap-1 mb-1.5 text-[10px] font-semibold tracking-wider uppercase text-primary/60 group-hover:text-primary/80 transition-colors">
-              {s.label}
+            <span className="text-sm text-foreground/70 group-hover:text-foreground leading-snug transition-colors">
+              {s.title}
             </span>
-            <p className="text-[12.5px] text-foreground/80 leading-snug group-hover:text-foreground transition-colors">
-              {s.question}
-            </p>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 mt-0.5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors"
+            >
+              <path d="M7 7h10v10" />
+              <path d="M7 17 17 7" />
+            </svg>
           </button>
         ))}
       </div>

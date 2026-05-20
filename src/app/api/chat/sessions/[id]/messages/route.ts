@@ -1,10 +1,13 @@
 // ── CHAT MESSAGES: LOAD HISTORY FOR A SESSION ──────────────────────────
 //
-// Returns the ordered message list for a session. The session ID is a
-// random UUID that functions as a bearer token — knowing it grants read
-// access, the same trust model as a shareable link. This is acceptable
-// for a demo assistant; a production system would verify the session
-// belongs to the authenticated user (join chat_sessions WHERE user_id).
+// Returns the ordered message list for a session. Ownership is verified
+// before returning messages: the query checks both id AND user_id so a
+// user who somehow obtains another session's UUID cannot read its history
+// (IDOR prevention). The auth check lives here rather than in the
+// persistence layer so loadChatMessages stays free of auth concerns.
+//
+// 404 is returned for both "not found" and "wrong owner" to avoid leaking
+// whether a given session ID exists.
 //
 // Messages are ordered by sort_order ASC so the client receives them in
 // conversation order regardless of insertion timing.

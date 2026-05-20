@@ -1,10 +1,27 @@
 "use client";
 
-import { useState } from "react";
+// ── KB SEARCH & DOCUMENT MANAGER ───────────────────────────────────────
+//
+// Renders the Knowledge Base page: a searchable list of all documents
+// (static + user-uploaded), an upload dialog, and per-row delete actions.
+//
+// Static documents (defined in lib/constants.ts) are read-only — they
+// power the demo and cannot be deleted from the UI. User-uploaded docs
+// show a Delete button; static docs show a "Protected" badge instead.
+//
+// After any mutation (upload or delete), a custom DOM event
+// "documind-documents-updated" is dispatched so the sidebar can refresh
+// its document list without a full page reload or shared state.
+//
+// Polling: documents in "pending" or "processing" status are being indexed
+// by the Workflow. The component polls /api/documents every 3 s until all
+// docs reach a terminal state — see the useEffect comment below.
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { KNOWLEDGE_BASE_DOCS } from "@/lib/constants";
+import type { KnowledgeBaseDocument } from "@/lib/kb/types";
 import {
   Dialog,
   DialogContent,
@@ -14,26 +31,152 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-const MOCK_FILE_META: Record<string, { size: string; updated: string }> = {
-  "deployment-runbook": { size: "4.2 KB", updated: "Apr 24, 2026" },
-  "incident-response": { size: "3.8 KB", updated: "Apr 22, 2026" },
-  "api-auth-guide": { size: "5.1 KB", updated: "Apr 20, 2026" },
-  "onboarding-checklist": { size: "3.4 KB", updated: "Apr 18, 2026" },
-  "database-migrations": { size: "4.6 KB", updated: "Apr 15, 2026" },
-};
+function formatBytes(value: number | null) {
+  if (!value || value <= 0) return "—";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(iso: string) {
+  const date = new Date(iso);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function extensionBadge(filename: string) {
+  const ext = filename.toLowerCase().split(".").pop();
+  if (!ext) return ".txt";
+  if (ext === "docx") return ".docx";
+  if (ext === "pdf") return ".pdf";
+  if (ext === "md") return ".md";
+  if (ext === "txt") return ".txt";
+  return `.${ext}`;
+}
 
 export function KBSearch() {
   const [query, setQuery] = useState("");
+  const [documents, setDocuments] = useState<KnowledgeBaseDocument[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const filtered = KNOWLEDGE_BASE_DOCS.filter((doc) => {
+  async function fetchDocuments() {
+    const response = await fetch("/api/documents", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("Failed to load documents.");
+    }
+    const data = (await response.json()) as { documents?: KnowledgeBaseDocument[] };
+    setDocuments(data.documents ?? []);
+  }
+
+  // Initial fetch on mount.
+  useEffect(() => {
+    fetch("/api/documents", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { documents?: KnowledgeBaseDocument[] } | null) => {
+        if (data?.documents) {
+          setDocuments(data.documents);
+        }
+      })
+      .catch(() => null);
+  }, []);
+
+  // Poll while any document is still being ingested by the Workflow.
+  // The Workflow runs asynchronously after upload — status transitions from
+  // "pending" → "processing" → "ready" (or "failed") in Neon. Without polling
+  // the user would need to manually refresh to see the final state.
+  // The effect re-runs whenever `documents` changes, so the interval is
+  // automatically cleared once all docs reach a terminal state.
+  useEffect(() => {
+    const hasPending = documents.some(
+      (d) => d.status === "pending" || d.status === "processing"
+    );
+    if (!hasPending) return;
+
+    const interval = setInterval(() => {
+      fetchDocuments().catch(() => null);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [documents]);
+
+  const filtered = useMemo(() => documents.filter((doc) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
       doc.title.toLowerCase().includes(q) ||
-      doc.description.toLowerCase().includes(q)
+      doc.description.toLowerCase().includes(q) ||
+      doc.source.toLowerCase().includes(q)
     );
-  });
+  }), [documents, query]);
+
+  // Upload flow: POST multipart/form-data to /api/documents, which stores
+  // the file in Vercel Blob and creates a user_documents row. The server
+  // then fires docIngestWorkflow asynchronously — text extraction and
+  // embedding happen in the background, so the upload response returns
+  // immediately and the polling effect above tracks progress via status.
+  async function handleUpload() {
+    if (!selectedFile) {
+      setUploadError("Select a .md, .txt, .pdf, or .docx file to upload.");
+      return;
+    }
+
+    setUploadError(null);
+    setIsUploading(true);
+
+    try {
+      const body = new FormData();
+      body.append("file", selectedFile);
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        body,
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Upload failed.");
+      }
+      setSelectedFile(null);
+      setUploadOpen(false);
+      await fetchDocuments();
+      // Notify the sidebar to refresh its document list.
+      window.dispatchEvent(new Event("documind-documents-updated"));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleDeleteDocument(id: string, title: string) {
+    const confirmed = window.confirm(`Delete "${title}"? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(id);
+    try {
+      const response = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Delete failed.");
+      }
+      await fetchDocuments();
+      // Notify the sidebar to refresh its document list.
+      window.dispatchEvent(new Event("documind-documents-updated"));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Delete failed.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <>
@@ -92,27 +235,24 @@ export function KBSearch() {
         </div>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_80px_100px] sm:grid-cols-[1fr_80px_100px_120px] gap-x-2 px-4 py-2 bg-muted/50 border-b border-border text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="grid grid-cols-[1fr_80px_90px] sm:grid-cols-[1fr_80px_90px_120px_80px] gap-x-2 px-4 py-2 bg-muted/50 border-b border-border text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <span>Name</span>
             <span>Type</span>
-            <span className="hidden sm:block">Size</span>
+            <span>Size</span>
             <span className="text-right">Modified</span>
+            <span className="text-right hidden sm:block">Actions</span>
           </div>
 
-          {/* File rows */}
           {filtered.map((doc, i) => {
-            const meta = MOCK_FILE_META[doc.slug];
+            const filename = doc.sourceType === "static" ? `${doc.slug}.md` : doc.source;
             return (
-              <Link
+              <div
                 key={doc.slug}
-                href={`/kb/${doc.slug}`}
-                className={`group grid grid-cols-[1fr_80px_100px] sm:grid-cols-[1fr_80px_100px_120px] gap-x-2 items-center px-4 py-2.5 hover:bg-accent/50 transition-colors ${
+                className={`group grid grid-cols-[1fr_80px_90px] sm:grid-cols-[1fr_80px_90px_120px_80px] gap-x-2 items-center px-4 py-2.5 hover:bg-accent/50 transition-colors ${
                   i < filtered.length - 1 ? "border-b border-border/50" : ""
                 }`}
               >
-                {/* File name with icon */}
-                <div className="flex items-center gap-2.5 min-w-0">
+                <Link href={`/kb/${doc.slug}`} className="flex items-center gap-2.5 min-w-0">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="16"
@@ -123,7 +263,7 @@ export function KBSearch() {
                     strokeWidth="1.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors"
+                    className="shrink-0 text-muted-foreground group-hover:text-foreground transition-colors"
                   >
                     <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
                     <path d="M14 2v4a2 2 0 0 0 2 2h4" />
@@ -132,32 +272,61 @@ export function KBSearch() {
                     <path d="M16 17H8" />
                   </svg>
                   <div className="min-w-0">
-                    <span className="text-sm font-medium truncate block group-hover:text-primary transition-colors">
-                      {doc.slug}.md
+                    <span className="text-sm font-medium truncate block group-hover:text-foreground transition-colors">
+                      {filename}
                     </span>
                     <span className="text-[11px] text-muted-foreground truncate block">
                       {doc.title}
                     </span>
                   </div>
+                </Link>
+
+                <Link href={`/kb/${doc.slug}`} className="text-xs text-muted-foreground">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">
+                    {extensionBadge(filename)}
+                  </span>
+                </Link>
+
+                <Link href={`/kb/${doc.slug}`} className="text-xs text-muted-foreground">
+                  {formatBytes(doc.sizeBytes)}
+                </Link>
+
+                <div className="text-right">
+                  <Link href={`/kb/${doc.slug}`} className="text-xs text-muted-foreground text-right">
+                    {formatDate(doc.updatedAt)}
+                  </Link>
                 </div>
 
-                {/* Type */}
-                <span className="text-xs text-muted-foreground">
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono">
-                    .md
+                <div className="hidden sm:flex items-center justify-end">
+                  {/* Static docs are protected: deleting them would remove the
+                      application's base knowledge base. Only user-uploaded docs
+                      expose the Delete button; static ones show "Protected". */}
+                  {doc.sourceType === "upload" ? (
+                    <button
+                      onClick={() => handleDeleteDocument(doc.id, doc.title)}
+                      disabled={deletingId === doc.id}
+                      className="text-[10px] px-2 py-1 rounded border border-border hover:bg-accent disabled:opacity-50"
+                      aria-label={`Delete ${doc.title}`}
+                    >
+                      {deletingId === doc.id ? "Deleting…" : "Delete"}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground border border-border rounded px-2 py-1">
+                      Protected
+                    </span>
+                  )}
+                </div>
+                {doc.sourceType === "upload" && doc.status && doc.status !== "ready" && (
+                  <span className="col-span-full text-[10px] text-amber-600 mt-1">
+                    Index status: {doc.status}
                   </span>
-                </span>
-
-                {/* Size */}
-                <span className="hidden sm:block text-xs text-muted-foreground">
-                  {meta?.size ?? "—"}
-                </span>
-
-                {/* Modified */}
-                <span className="text-xs text-muted-foreground text-right">
-                  {meta?.updated ?? "—"}
-                </span>
-              </Link>
+                )}
+                {doc.sourceType === "upload" && doc.status === "failed" && doc.error && (
+                  <span className="col-span-full text-[10px] text-red-600 mt-1">
+                    Failure reason: {doc.error}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -169,19 +338,17 @@ export function KBSearch() {
         {query.trim() ? ` matching "${query}"` : " in knowledge base"}
       </p>
 
-      {/* Upload mock dialog */}
+      {/* Upload dialog */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Upload Document</DialogTitle>
             <DialogDescription>
-              Document uploads are not available in this demo. In production,
-              this would accept Markdown, PDF, or plain text files, chunk them
-              automatically, generate embeddings, and add them to the knowledge
-              base.
+              Upload Markdown, text, PDF, or DOCX files. The file is stored in Vercel
+              Blob, text is extracted server-side, then indexed asynchronously via Workflow.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border-2 border-dashed border-border bg-muted/30 p-8 text-center opacity-50">
+          <div className="rounded-lg border-2 border-dashed border-border bg-muted/30 p-6 text-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="32"
@@ -192,25 +359,41 @@ export function KBSearch() {
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="mx-auto text-muted-foreground/50 mb-3"
+              className="mx-auto text-muted-foreground mb-3"
             >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" x2="12" y1="3" y2="15" />
             </svg>
             <p className="text-sm text-muted-foreground">
-              Drag & drop files here, or click to browse
+              Select a file to upload
             </p>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
-              .md, .txt, .pdf (max 10MB)
+              .md, .txt, .pdf, .docx (max 10MB)
             </p>
+            <Input
+              type="file"
+              accept=".md,.txt,.pdf,.docx,text/markdown,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="mt-4"
+              onChange={(event) =>
+                setSelectedFile(event.target.files?.[0] ?? null)
+              }
+            />
           </div>
-          <p className="text-xs text-muted-foreground text-center">
-            Upload is disabled for this demo.
-          </p>
+          {selectedFile && (
+            <p className="text-xs text-muted-foreground text-center">
+              Selected: {selectedFile.name} ({formatBytes(selectedFile.size)})
+            </p>
+          )}
+          {uploadError && (
+            <p className="text-xs text-red-500 text-center">{uploadError}</p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadOpen(false)}>
               Close
+            </Button>
+            <Button onClick={handleUpload} disabled={isUploading || !selectedFile}>
+              {isUploading ? "Uploading..." : "Upload & Index"}
             </Button>
           </DialogFooter>
         </DialogContent>

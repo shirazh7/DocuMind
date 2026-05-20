@@ -1,7 +1,15 @@
-// Centralised doc metadata avoids reading the filesystem on the client.
+// Centralised static doc metadata avoids reading the filesystem on the client.
 // The sidebar, KB index, and KB detail page all reference this array
 // rather than duplicating titles and descriptions. Slugs match filenames
 // in src/data/docs/ by convention so loadDocumentBySlug works without a lookup table.
+export type DocIcon =
+  | "rocket"
+  | "alert"
+  | "key"
+  | "users"
+  | "database"
+  | "file";
+
 export const KNOWLEDGE_BASE_DOCS = [
   {
     slug: "deployment-runbook",
@@ -35,4 +43,4 @@ export const KNOWLEDGE_BASE_DOCS = [
   },
 ] as const;
 
-export type DocIcon = (typeof KNOWLEDGE_BASE_DOCS)[number]["icon"];
+export const DOC_ICON_FALLBACK: DocIcon = "database";

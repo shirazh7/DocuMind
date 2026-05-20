@@ -13,7 +13,7 @@
 // exactly what's being tested and exactly why something passed or failed.
 // Run it 100 times, same result. No black box in the evaluation.
 //
-// PRODUCTION: Layer in LLM-as-judge using generateObject from the AI SDK —
+// TODO(production): Layer in LLM-as-judge using generateObject from the AI SDK —
 // a second model call assesses whether the response is grounded in the
 // retrieved chunks. The deterministic baseline stays as the foundation
 // because it's auditable. Use a framework like Braintrust or Langsmith

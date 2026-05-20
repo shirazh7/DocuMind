@@ -31,7 +31,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { KNOWLEDGE_BASE_DOCS, type DocIcon } from "@/lib/constants";
+import type { DocIcon } from "@/lib/constants";
+import type { KnowledgeBaseDocument } from "@/lib/kb/types";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 
@@ -111,6 +112,15 @@ function DocIconSvg({ icon }: { icon: DocIcon }) {
           <path d="M3 12A9 3 0 0 0 21 12" />
         </svg>
       );
+    case "file":
+      return (
+        <svg {...shared}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+          <path d="M14 2v6h6" />
+          <path d="M9 13h6" />
+          <path d="M9 17h6" />
+        </svg>
+      );
   }
 }
 
@@ -125,6 +135,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const [kbExpanded, setKbExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(true);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [documents, setDocuments] = useState<KnowledgeBaseDocument[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -134,6 +145,24 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         if (data?.sessions) setSessions(data.sessions);
       })
       .catch(() => null);
+  }, [pathname]);
+
+  useEffect(() => {
+    function fetchDocuments() {
+      fetch("/api/documents")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { documents?: KnowledgeBaseDocument[] } | null) => {
+          if (data?.documents) {
+            setDocuments(data.documents);
+          }
+        })
+        .catch(() => null);
+    }
+
+    fetchDocuments();
+    window.addEventListener("documind-documents-updated", fetchDocuments);
+    return () =>
+      window.removeEventListener("documind-documents-updated", fetchDocuments);
   }, [pathname]);
 
   function handleSessionClick(id: string) {
@@ -211,6 +240,16 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         </svg>
       ),
     },
+    {
+      href: "/platform",
+      label: "Platform Capabilities",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="11" x="3" y="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      ),
+    },
   ];
 
   function handleDocClick(slug: string) {
@@ -220,47 +259,31 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
 
   return (
     <>
-      {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-[228px] bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${
+        className={`fixed top-0 left-0 z-50 h-full w-[248px] bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-200 lg:translate-x-0 lg:static lg:z-auto ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         onClick={() => pendingDelete && setPendingDelete(null)}
       >
-        {/* Logo */}
-        <div className="flex items-center gap-2.5 px-4 h-12 border-b border-sidebar-border shrink-0">
-          <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-primary-foreground"
-            >
-              <path d="M12 3 2 9l10 6 10-6-10-6Z" />
-              <path d="m2 17 10 6 10-6" />
-              <path d="m2 13 10 6 10-6" />
-            </svg>
+        {/* Logo / project header */}
+        <div className="flex items-center gap-2.5 px-4 h-[52px] border-b border-sidebar-border shrink-0">
+          <div className="flex items-center justify-center h-6 w-6 rounded bg-foreground text-background text-[10px] font-bold font-mono shrink-0 tracking-tight select-none">
+            dm
           </div>
-          <span className="font-semibold text-[13px] tracking-tight text-sidebar-foreground">DocuMind</span>
+          <span className="text-[14px] font-medium text-sidebar-foreground tracking-tight">DocuMind</span>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2.5">
+        <nav className="flex-1 overflow-y-auto p-2.5">
           {/* Main nav items */}
-          <div className="space-y-0.5">
+          <div className="space-y-px">
             {navItems.map((item) => {
               const active = "matchPrefix" in item && item.matchPrefix
                 ? pathname.startsWith(item.href)
@@ -270,13 +293,13 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors duration-100 ${
+                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[14px] transition-colors duration-100 ${
                     active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      : "text-sidebar-foreground/60 hover:bg-accent/60 hover:text-sidebar-foreground"
+                      ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                      : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   }`}
                 >
-                  <span className={active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}>
+                  <span className={`shrink-0 ${active ? "text-sidebar-foreground" : "text-sidebar-foreground/35"}`}>
                     {item.icon}
                   </span>
                   {item.label}
@@ -285,45 +308,45 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
             })}
           </div>
 
-          <Separator className="my-3 bg-sidebar-border" />
+          <Separator className="my-2.5 bg-sidebar-border" />
 
-          {/* Knowledge Base section */}
+          {/* Documents section */}
           <div>
             <button
               onClick={() => setKbExpanded(!kbExpanded)}
-              className="flex items-center justify-between w-full px-3 py-1.5 text-[11px] font-semibold text-sidebar-foreground/40 hover:text-sidebar-foreground/70 tracking-wider uppercase transition-colors"
+              className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
             >
               Documents
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="11"
-                height="11"
+                width="12"
+                height="12"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={`transition-transform duration-200 ${kbExpanded ? "rotate-180" : ""}`}
+                className={`transition-transform duration-150 ${kbExpanded ? "rotate-180" : ""}`}
               >
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
             {kbExpanded && (
-              <div className="mt-1 space-y-0.5">
-                {KNOWLEDGE_BASE_DOCS.map((doc) => {
+              <div className="mt-px space-y-px">
+                {documents.map((doc) => {
                   const docActive = pathname === `/kb/${doc.slug}`;
                   return (
                     <button
                       key={doc.slug}
                       onClick={() => handleDocClick(doc.slug)}
-                      className={`flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-[12px] transition-colors duration-100 text-left ${
+                      className={`flex items-center gap-2 w-full px-2.5 py-[7px] rounded-md text-[13px] transition-colors duration-100 text-left ${
                         docActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                          : "text-sidebar-foreground/50 hover:bg-accent/60 hover:text-sidebar-foreground"
+                          ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                          : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
                       }`}
                     >
-                      <span className="shrink-0 opacity-50">
+                      <span className="shrink-0 opacity-40">
                         <DocIconSvg icon={doc.icon} />
                       </span>
                       <span className="truncate">{doc.title}</span>
@@ -336,32 +359,32 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
 
           {sessions.length > 0 && (
             <>
-              <Separator className="my-3 bg-sidebar-border" />
+              <Separator className="my-2.5 bg-sidebar-border" />
 
               {/* Recent conversations section */}
               <div>
                 <button
                   onClick={() => setHistoryExpanded(!historyExpanded)}
-                  className="flex items-center justify-between w-full px-3 py-1.5 text-[11px] font-semibold text-sidebar-foreground/40 hover:text-sidebar-foreground/70 tracking-wider uppercase transition-colors"
+                  className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
                 >
                   Recent Chats
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="11"
-                    height="11"
+                    width="12"
+                    height="12"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2.5"
+                    strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className={`transition-transform duration-200 ${historyExpanded ? "rotate-180" : ""}`}
+                    className={`transition-transform duration-150 ${historyExpanded ? "rotate-180" : ""}`}
                   >
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </button>
                 {historyExpanded && (
-                  <div className="mt-1 space-y-0.5">
+                  <div className="mt-px space-y-px">
                     {sessions.map((session) => {
                       const currentId = typeof window !== "undefined"
                         ? window.localStorage.getItem("documind-session-id")
@@ -370,10 +393,10 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                       return (
                         <div
                           key={session.id}
-                          className={`group flex items-center gap-1.5 w-full px-3 py-1.5 rounded-lg text-[12px] transition-colors duration-100 ${
+                          className={`group flex items-center gap-1 w-full px-2.5 py-[7px] rounded-md text-[13px] transition-colors duration-100 ${
                             isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                              : "text-sidebar-foreground/50 hover:bg-accent/60 hover:text-sidebar-foreground"
+                              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                              : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
                           }`}
                         >
                           <button
@@ -382,22 +405,22 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
-                              width="11"
-                              height="11"
+                              width="12"
+                              height="12"
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="2"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="shrink-0 opacity-40"
+                              className="shrink-0 opacity-35"
                             >
                               <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
                             </svg>
                             <span className="flex-1 truncate">
                               {session.title ?? "Untitled conversation"}
                             </span>
-                            <span className="shrink-0 text-[10px] opacity-40 tabular-nums">
+                            <span className="shrink-0 text-[11px] opacity-35 tabular-nums font-mono">
                               {formatRelativeTime(session.updated_at)}
                             </span>
                           </button>
@@ -405,14 +428,14 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                             <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={(e) => handleDeleteConfirm(e, session.id)}
-                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                                className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
                                 aria-label="Confirm delete"
                               >
                                 Delete
                               </button>
                               <button
                                 onClick={handleDeleteCancel}
-                                className="text-[10px] px-1 py-0.5 rounded text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+                                className="text-[11px] px-1 py-0.5 rounded text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
                                 aria-label="Cancel"
                               >
                                 Cancel
@@ -421,14 +444,14 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
                           ) : (
                             <button
                               onClick={(e) => handleDeleteClick(e, session.id)}
-                              className="shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:text-red-500"
+                              className="shrink-0 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity p-0.5 rounded hover:text-red-500"
                               aria-label="Delete conversation"
                               title="Delete conversation"
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                width="11"
-                                height="11"
+                                width="12"
+                                height="12"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -455,8 +478,8 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
         {/* Bottom */}
         <div className="border-t border-sidebar-border px-3 py-3 flex items-center justify-between shrink-0">
           <ThemeToggle />
-          <span className="text-[10px] text-sidebar-foreground/30 font-mono tracking-tight">
-            AI SDK
+          <span className="text-[11px] text-sidebar-foreground/25 font-mono tracking-tight">
+            v0.1
           </span>
         </div>
       </aside>

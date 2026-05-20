@@ -12,6 +12,10 @@
 // rows for the current model, which safely handles model upgrades without
 // deleting data for other models.
 //
+// User-uploaded docs are stored with source prefix "user-doc:". Force reindex
+// intentionally excludes those rows so the weekly static-doc cron does not wipe
+// customer uploads (Option A chosen for demo reliability/cost predictability).
+//
 // Upsert over insert: ON CONFLICT (source, chunk_index, embedding_model)
 // DO UPDATE lets incremental ingest update changed chunks without needing
 // to track document hashes. The triple composite key means the same source
@@ -63,13 +67,31 @@ function toPgVector(values: number[]) {
   return `[${values.join(",")}]`;
 }
 
+function sourceForUploadedDocument(documentId: string) {
+  return `user-doc:${documentId}`;
+}
+
+/**
+ * Syncs static KNOWLEDGE_BASE_DOCS into the Neon pgvector store.
+ *
+ * `force: false` (default) — skips if any chunks already exist for the current
+ * embedding model. Used on cold starts to avoid re-embedding on every deploy.
+ *
+ * `force: true` — deletes all existing static chunks before reinserting.
+ * Used by the reindex cron to pick up document edits. Never touches chunks
+ * with a `user-doc:` source prefix so user uploads are preserved.
+ */
 export async function syncPersistentStore(options?: { force?: boolean }) {
   await ensureDatabaseSchema();
   const sql = getDb();
   const force = options?.force ?? false;
 
   if (force) {
-    await sql`DELETE FROM rag_chunks WHERE embedding_model = ${EMBEDDING_MODEL}`;
+    await sql`
+      DELETE FROM rag_chunks
+      WHERE embedding_model = ${EMBEDDING_MODEL}
+        AND source NOT LIKE 'user-doc:%'
+    `;
   } else {
     const existing = (await sql`
       SELECT COUNT(*)::text AS count
@@ -123,6 +145,73 @@ export async function syncPersistentStore(options?: { force?: boolean }) {
   );
 }
 
+/**
+ * Incremental ingest for a single user-uploaded document. Deletes any
+ * existing chunks for this document (by `user-doc:<documentId>` source key),
+ * then chunks, embeds, and upserts the new content. Does not touch any other
+ * documents in the store.
+ */
+export async function syncUploadedDocument(input: {
+  documentId: string;
+  filename: string;
+  title: string;
+  content: string;
+}) {
+  await ensureDatabaseSchema();
+  const sql = getDb();
+  const source = sourceForUploadedDocument(input.documentId);
+
+  const chunks = chunkDocuments([
+    {
+      content: input.content,
+      metadata: {
+        title: input.title,
+        source,
+      },
+    },
+  ]);
+
+  const embeddedChunks = await generateChunkEmbeddings(chunks);
+
+  await sql`
+    DELETE FROM rag_chunks
+    WHERE source = ${source}
+      AND embedding_model = ${EMBEDDING_MODEL}
+  `;
+
+  for (const { chunk, embedding } of embeddedChunks) {
+    await sql`
+      INSERT INTO rag_chunks (
+        source,
+        title,
+        section,
+        chunk_index,
+        content,
+        embedding,
+        embedding_model,
+        updated_at
+      )
+      VALUES (
+        ${source},
+        ${chunk.metadata.title},
+        ${chunk.metadata.section},
+        ${chunk.metadata.chunkIndex},
+        ${chunk.text},
+        ${toPgVector(embedding)}::vector,
+        ${EMBEDDING_MODEL},
+        NOW()
+      )
+      ON CONFLICT (source, chunk_index, embedding_model)
+      DO UPDATE SET
+        title = EXCLUDED.title,
+        section = EXCLUDED.section,
+        content = EXCLUDED.content,
+        embedding = EXCLUDED.embedding,
+        updated_at = NOW()
+    `;
+  }
+}
+
 export async function ensurePersistentStoreReady() {
   if (!initPromise) {
     initPromise = syncPersistentStore().catch((error) => {
@@ -134,6 +223,13 @@ export async function ensurePersistentStoreReady() {
   await initPromise;
 }
 
+/**
+ * Returns the top-K chunks closest to `queryEmbedding` by cosine similarity
+ * via pgvector's `<=>` operator (cosine distance). Similarity is returned as
+ * `1 − cosine_distance`, so 1.0 = identical vectors, 0.0 = orthogonal.
+ * Does not apply a similarity threshold — callers (lib/ai/tools.ts) are
+ * responsible for filtering below MIN_SIMILARITY.
+ */
 export async function searchSimilarChunks(
   queryEmbedding: number[],
   topK: number

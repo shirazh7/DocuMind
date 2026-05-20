@@ -44,19 +44,36 @@ function safeVercelAdapter(): any {
 
 const adapter = safeVercelAdapter();
 
-// Gates the GPT-4o Mini model in the chat model selector.
+function createBooleanFlag(input: { key: string; description: string }) {
+  if (adapter) {
+    return flag<boolean>({
+      key: input.key,
+      adapter,
+      defaultValue: false,
+      description: input.description,
+    });
+  }
+
+  return flag<boolean>({
+    key: input.key,
+    decide: () => false,
+    defaultValue: false,
+    description: input.description,
+  });
+}
+
+// Gates the premium model tier in the chat model selector.
 // When OFF: only GPT-4.1 Nano is available, minimising AI Gateway spend.
-// When ON: GPT-4o Mini appears, enabling higher-quality responses.
-// Use this to control model availability per environment or for staged rollouts.
-// Default OFF so preview and production deployments don't silently enable
-// the more expensive model without a deliberate decision.
-export const premiumModelEnabled = flag<boolean>({
+// When ON: GPT-4o Mini and Claude Sonnet 4.5 appear. Claude Sonnet 4.5
+// supports extended thinking — the AI SDK surfaces reasoning tokens as a
+// collapsible "Thought" block in the chat UI, matching the v0 pattern.
+// Use this to control model availability per environment or for staged
+// rollouts. Default OFF so deployments don't silently enable more expensive
+// models without a deliberate decision in the Vercel Dashboard.
+export const premiumModelEnabled = createBooleanFlag({
   key: "premium-model-enabled",
-  adapter,
-  decide: () => false,
-  defaultValue: false,
   description:
-    "Enables GPT-4o Mini in the model selector. Off by default to control AI Gateway spend per environment.",
+    "Enables GPT-4o Mini and Claude Sonnet 4.5 (with reasoning trace) in the model selector. Off by default to control AI Gateway spend.",
 });
 
 // Gates the /eval page entirely.
@@ -65,11 +82,8 @@ export const premiumModelEnabled = flag<boolean>({
 // runs and reserves the suite for CI pipelines and admin use.
 // The eval-runner component already notes this constraint in its comments.
 // Default OFF — enable per-environment in the Vercel Dashboard when needed.
-export const evalSuiteEnabled = flag<boolean>({
+export const evalSuiteEnabled = createBooleanFlag({
   key: "eval-suite-enabled",
-  adapter,
-  decide: () => false,
-  defaultValue: false,
   description:
     "Gates the Evaluation Suite page. Each run costs AI Gateway credits — keep off in production unless intentional.",
 });

@@ -4,7 +4,7 @@ import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 
-// PRODUCTION: Persist theme preference per-user in their profile settings.
+// TODO(production): Persist theme preference per-user in their profile settings.
 
 const emptySubscribe = () => () => {};
 

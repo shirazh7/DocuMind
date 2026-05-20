@@ -4,8 +4,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-// PRODUCTION: Add CSP headers via next.config.ts or middleware to prevent XSS.
-// PRODUCTION: Add error boundary at this level to catch rendering errors globally.
+// TODO(production): Add CSP headers via next.config.ts or middleware to prevent XSS.
+// TODO(production): Add error boundary at this level to catch rendering errors globally.
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

@@ -8,8 +8,8 @@
 // initialises the Workflow runtime which needs full Node.js APIs.
 //
 // No auth guard: this is an internal operator endpoint. In production, add
-// a WORKFLOW_TRIGGER_SECRET check or restrict to admin roles. For a demo
-// the proxy auth cookie provides a first line of defence.
+// a WORKFLOW_TRIGGER_SECRET check or restrict to admin roles. The proxy
+// auth cookie provides a first line of defence for now.
 import { NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { ragIngestWorkflow } from "@/workflows/rag-ingest";

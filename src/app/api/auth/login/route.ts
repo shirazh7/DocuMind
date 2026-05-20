@@ -3,7 +3,7 @@
 // Validates username/password against env vars. On success, sets an
 // httpOnly cookie (not accessible via JS, secure over HTTPS in prod).
 // 7-day expiry — avoids forcing re-login during the demo.
-// PRODUCTION: Short-lived JWTs with refresh tokens.
+// TODO(production): Short-lived JWTs with refresh tokens.
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {

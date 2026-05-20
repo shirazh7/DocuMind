@@ -11,9 +11,9 @@ import { TextChunk } from "./chunker";
 // embedMany batches in groups of 100 (OpenAI's limit per request).
 // embed handles single queries for real-time retrieval.
 //
-// PRODUCTION: Cache embeddings in Vercel KV or a managed vector DB to
+// TODO(production): Cache embeddings in Vercel KV or a managed vector DB to
 // avoid re-computing on every cold start.
-// PRODUCTION: Pin the embedding model version — if the model changes,
+// TODO(production): Pin the embedding model version — if the model changes,
 // all stored embeddings must be regenerated for consistency.
 
 export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
@@ -41,7 +41,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 }
 
 export async function embedQuery(query: string): Promise<number[]> {
-  // PRODUCTION: Sanitize query — strip HTML, limit length, validate encoding.
+  // TODO(production): Sanitize query — strip HTML, limit length, validate encoding.
   const { embedding } = await embed({
     model: EMBEDDING_MODEL,
     value: query,

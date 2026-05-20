@@ -24,7 +24,7 @@ import { ChunkMetadata } from "./chunker";
 // so cosine and dot product are equivalent. Cosine is more intuitive to
 // explain — 1.0 is identical, 0.0 is unrelated.
 //
-// PRODUCTION: Three additions for a real system:
+// TODO(production): Three additions for a real system:
 // 1. Hybrid search — combine vector similarity with BM25 keyword matching
 //    so terms like CLI commands or error codes that don't embed well are found.
 // 2. Query rewriting — expand the user's question into better search terms.

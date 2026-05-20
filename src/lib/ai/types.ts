@@ -10,6 +10,10 @@ export type MessageMetadata = {
   estimatedCost?: number;
   sessionId?: string;
   requestId?: string;
+  // createdAt: ms epoch sent on the 'start' part — drives the timestamp display.
+  createdAt?: number;
+  // durationMs: Date.now() - startTime sent on the 'finish' part — drives "Worked for Xs".
+  durationMs?: number;
 };
 
 export type DocuMindMessage = UIMessage<MessageMetadata>;

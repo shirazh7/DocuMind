@@ -7,7 +7,7 @@
 // from token usage × per-model pricing and streamed via messageMetadata.
 // No separate API call for cost data.
 //
-// PRODUCTION: Fetch costs dynamically from a pricing API. Display
+// TODO(production): Fetch costs dynamically from a pricing API. Display
 // accumulated session/monthly cost to admins. Enforce spend limits.
 
 import {
@@ -44,7 +44,7 @@ export function ModelSelector({
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[11px] font-mono rounded-lg border border-border/60 bg-background hover:bg-accent transition-colors disabled:opacity-50 tracking-tight"
+          className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[12px] font-mono rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 tracking-tight text-foreground/70 hover:text-foreground"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {currentModel.name}

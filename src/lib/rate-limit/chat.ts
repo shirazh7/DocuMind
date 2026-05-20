@@ -72,6 +72,17 @@ function getRateLimiter() {
   return ratelimit;
 }
 
+/**
+ * Checks whether `identifier` (user ID or IP) has exceeded the chat rate
+ * limit. Returns `{ success, limit, remaining, reset, reason }`.
+ *
+ * When `success` is false, the caller should return a 429 response with
+ * `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers set from the
+ * returned values.
+ *
+ * Fails open (returns success: true) when Upstash credentials are absent —
+ * rate limiting is a spend control, not a security gate.
+ */
 export async function enforceChatRateLimit(identifier: string) {
   const limiter = getRateLimiter();
 
