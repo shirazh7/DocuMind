@@ -13,7 +13,8 @@ import { documentTools } from "@/lib/ai/tools";
 // Extracts sources from tool results in steps to include them in the
 // eval output alongside the answer text and latency.
 //
-// TODO(production): Behind authentication only — each run costs API credits.
+// Access is controlled via the eval-suite-enabled feature flag (src/flags.ts).
+// The flag gates the eval UI and can be toggled per-environment without a deploy.
 
 export const runtime = "nodejs";
 export const maxDuration = 30;

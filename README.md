@@ -13,43 +13,38 @@ DocuMind is a production-oriented AI knowledge assistant for engineering teams. 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Next.js App                              │
-│                                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐    │
-│  │   Chat   │  │ Knowledge│  │   Eval   │  │ Architecture │    │
-│  │  (/chat) │  │   Base   │  │  (/eval) │  │ (/architect- │    │
-│  │          │  │  (/kb)   │  │          │  │    ure)      │    │
-│  └────┬─────┘  └──────────┘  └─────┬────┘  └──────────────┘    │
-│       │                            │                             │
-│       ┌────────────────────────────┘                             │
-│       │                                                          │
-│  ┌────▼─────────────────────────────────┐                       │
-│  │        API Routes (Node.js)           │                       │
-│  │  /api/chat (streamText)               │                       │
-│  │  /api/eval (generateText)             │                       │
-│  └────┬──────────────────────┬──────────┘                       │
-│       │                      │                                   │
-│  ┌────▼───────────┐  ┌──────▼────────┐                          │
-│  │  Tool Calling   │  │  RAG Pipeline  │                         │
-│  │  retrieveDocs   │──│  Embed → Search│                         │
-│  └────────────────┘  └──────┬────────┘                          │
-│                              │                                   │
-│                     ┌────────▼────────┐                          │
-│                     │  Vector Store   │                          │
-│                     │  Neon pgvector  │                          │
-│                     └────────┬────────┘                          │
-│                              │                                   │
-│                     ┌────────▼───────┐                           │
-│                     │  Markdown Docs  │                          │
-│                     └────────────────┘                           │
-└──────────────────────────────────────────────────────────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │    Vercel AI Gateway    │
-              │  OpenAI + Anthropic LLM │
-              │ text-embedding-3-small  │
-              └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Next.js App                               │
+│                                                                     │
+│  ┌────────┐ ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐           │
+│  │  Chat  │ │  KB  │ │ Eval │ │ Platform │ │ /upload  │           │
+│  │ /chat  │ │ /kb  │ │/eval │ │/platform │ │   docs   │           │
+│  └───┬────┘ └──────┘ └──┬───┘ └──────────┘ └────┬─────┘           │
+│      │                  │                        │                  │
+│  ┌───▼──────────────────▼───────────────────┐   │                  │
+│  │           API Routes (Node.js)            │   │                  │
+│  │  /api/chat (streamText + rate limit)      │   │                  │
+│  │  /api/eval (generateText + flag gate)     │   │                  │
+│  │  /api/documents (CRUD + Blob)             │◄──┘                  │
+│  │  /api/workflows/* (cron-triggered)        │                      │
+│  └───┬─────────────────────┬─────────────────┘                     │
+│      │                     │                                        │
+│  ┌───▼──────────┐  ┌───────▼──────────┐  ┌────────────────────┐   │
+│  │ Tool Calling │  │   RAG Pipeline   │  │  Rate Limiter      │   │
+│  │ retrieveDocs │──│ Embed → pgvector │  │  Upstash Redis     │   │
+│  └──────────────┘  └───────┬──────────┘  └────────────────────┘   │
+│                             │                                       │
+│  ┌──────────────────────────▼──────────────────────────────────┐   │
+│  │                  Neon Postgres (pgvector)                    │   │
+│  │   rag_chunks · chat_sessions · chat_messages · user_docs    │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+          │                        │                     │
+┌─────────▼──────────┐  ┌──────────▼─────────┐  ┌──────▼──────────┐
+│  Vercel AI Gateway  │  │   Vercel Blob       │  │  Vercel Flags   │
+│  OpenAI + Anthropic │  │  user doc storage   │  │  feature gates  │
+│  text-embedding-3   │  └────────────────────┘  └─────────────────┘
+└─────────────────────┘
 ```
 
 ## Stack
@@ -65,23 +60,27 @@ DocuMind is a production-oriented AI knowledge assistant for engineering teams. 
 ## Production-Ready Features
 
 ### Chat Experience (`/chat`)
+
 - Streaming responses via `streamText` + `useChat`
 - Server-side chat session persistence (refresh-safe history)
 - Source citations and confidence indicators for trust
 - Model selector with per-query cost metadata
 
 ### RAG and Retrieval
+
 - Section-aware document chunking with overlap
 - Persistent embeddings in Neon (`rag_chunks`)
 - pgvector similarity search (`embedding <=> query`)
 - Tool-driven retrieval (`retrieveDocuments`) with bounded tool loops
 
 ### Durable Workflows
+
 - `POST /api/workflows/rag/ingest`: incremental ingestion
 - `POST /api/workflows/rag/reindex`: full embedding refresh
 - `POST /api/workflows/chat/maintenance`: retention cleanup
 
 ### Security and Spend Controls
+
 - Per-user/IP sliding-window rate limiting on `/api/chat`
 - AI Gateway request tagging (`feature:*`, `app:documind`) for observability
 - Guardrails for missing critical env vars at runtime
@@ -91,17 +90,17 @@ DocuMind is a production-oriented AI knowledge assistant for engineering teams. 
 ```bash
 # Clone the repo
 git clone <repo-url>
-cd documind
+
 
 # Install dependencies
-npm install
+pnpm install
 
 # Configure env vars
 cp .env.local.example .env.local
-# Add AI Gateway auth, DATABASE_URL, and Upstash Redis vars
+# Add AI Gateway auth, DATABASE_URL, Upstash Redis, and Blob vars
 
 # Start the dev server
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -109,36 +108,40 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Key Technical Decisions
 
 ### Why persistent pgvector instead of in-memory vectors?
+
 Persistent retrieval removes recurring cold-start embedding cost, improves first-response latency, and provides durable/auditable state.
 
 ### Why tool-based retrieval?
+
 The LLM decides when retrieval is needed and can iteratively refine searches while staying grounded in internal documents.
 
 ### Why AI Gateway model strings?
+
 Plain `provider/model` strings keep provider switching simple and preserve centralized gateway observability and controls.
 
 ### Why Workflow for ingestion and maintenance?
+
 Long-running indexing and cleanup jobs should be durable, retryable, and decoupled from user-facing request latency.
 
 ## Next Improvements
 
 - Replace demo cookie auth with SSO-ready identity integration (Clerk/Auth0/Descope)
-- Add document CRUD and ingestion from external content sources
 - Add hybrid retrieval (vector + BM25) and reranking
 - Introduce richer observability with OTEL traces and alerts
 - Upgrade evaluation from substring checks to semantic judge-based scoring
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `AI_GATEWAY_API_KEY` | AI Gateway API key (optional if using OIDC token) | No* |
-| `VERCEL_OIDC_TOKEN` | OIDC token from `vercel env pull` for AI Gateway auth | No* |
-| `DATABASE_URL` | Neon Postgres connection string for vectors + chat persistence | Yes |
-| `UPSTASH_REDIS_REST_URL` or `KV_REST_API_URL` | Upstash Redis REST URL for rate limiting | Yes |
-| `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_TOKEN` | Upstash Redis REST token for rate limiting | Yes |
-| `BASIC_AUTH_USERNAME` | Optional demo auth username | No |
-| `BASIC_AUTH_PASSWORD` | Optional demo auth password | No |
+| Variable                                          | Description                                                    | Required |
+| ------------------------------------------------- | -------------------------------------------------------------- | -------- |
+| `AI_GATEWAY_API_KEY`                              | AI Gateway API key (optional if using OIDC token)              | No\*     |
+| `VERCEL_OIDC_TOKEN`                               | OIDC token from `vercel env pull` for AI Gateway auth          | No\*     |
+| `DATABASE_URL`                                    | Neon Postgres connection string for vectors + chat persistence | Yes      |
+| `UPSTASH_REDIS_REST_URL` or `KV_REST_API_URL`     | Upstash Redis REST URL for rate limiting                       | Yes      |
+| `UPSTASH_REDIS_REST_TOKEN` or `KV_REST_API_TOKEN` | Upstash Redis REST token for rate limiting                     | Yes      |
+| `BLOB_READ_WRITE_TOKEN`                           | Vercel Blob token for user document uploads                    | Yes      |
+| `BASIC_AUTH_USERNAME`                             | Optional demo auth username                                    | No       |
+| `BASIC_AUTH_PASSWORD`                             | Optional demo auth password                                    | No       |
 
 \*At least one of `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is required.
 

@@ -213,7 +213,7 @@ const { embedding } = await embed({
   },
   "markdown-docs": {
     file: "src/data/docs/*.md",
-    description: "5 realistic engineering documents (~600-1000 words each) loaded via fs.readFileSync at startup. Covers deployment, incidents, API auth, onboarding, and database migrations.",
+    description: "5 realistic engineering documents (~600-1000 words each) ingested into Neon pgvector via the rag-ingest workflow. Covers deployment, incidents, API auth, onboarding, and database migrations.",
     sdkImports: [],
     sdkUsage: [],
   },
@@ -242,7 +242,7 @@ const { embedding } = await embed({
     description: "OpenAI text-embedding-3-small — 1536 dimensions. Cosine similarity scores typically range 0.25–0.65 (calibrated in confidence-badge.tsx).",
     sdkImports: [],
     sdkUsage: [
-      { fn: "cosineSimilarity()", purpose: "Imported from 'ai' in retriever.ts — computes similarity between query and chunk embeddings" },
+      { fn: "pgvector <=> operator", purpose: "Cosine similarity is computed in SQL by store.ts — ORDER BY embedding <=> query_vec LIMIT 5" },
     ],
   },
   "rate-limiter": {

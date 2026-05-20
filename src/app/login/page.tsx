@@ -11,8 +11,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +18,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<"username" | "password" | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,87 +46,295 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-[320px] space-y-6">
-        {/* Logo + branding */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-9 h-9 rounded bg-foreground text-background text-[13px] font-bold font-mono mx-auto select-none">
-            dm
-          </div>
-          <div>
-            <h1 className="text-[18px] font-semibold tracking-tight">DocuMind</h1>
-            <p className="text-[12px] text-muted-foreground mt-0.5">
-              Enterprise Knowledge Assistant
-            </p>
+    <>
+      <style>{`
+        @keyframes bar-shift {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes card-in {
+          from { opacity: 0; transform: translateY(16px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes spin-slow {
+          to { transform: rotate(360deg); }
+        }
+
+        .login-card { animation: card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        .spectrum-bar {
+          background: linear-gradient(
+            90deg,
+            #007cf0, #00dfd8, #7928ca, #ff0080, #ff4d4d, #f9cb28, #007cf0
+          );
+          background-size: 200% 100%;
+          animation: bar-shift 6s ease infinite;
+        }
+
+        .input-field {
+          width: 100%;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 8px;
+          padding: 9px 12px;
+          font-size: 13px;
+          color: rgba(255,255,255,0.9);
+          font-family: var(--font-geist-sans), sans-serif;
+          transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+          outline: none;
+        }
+        .input-field::placeholder { color: rgba(255,255,255,0.28); }
+        .input-field:focus {
+          background: rgba(255,255,255,0.06);
+          border-color: rgba(255,255,255,0.22);
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.06);
+        }
+
+        .submit-btn {
+          width: 100%;
+          height: 36px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          font-family: var(--font-geist-sans), sans-serif;
+          cursor: pointer;
+          border: none;
+          position: relative;
+          overflow: hidden;
+          transition: opacity 0.2s, transform 0.15s;
+          background: #fff;
+          color: #000;
+        }
+        .submit-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+        .submit-btn:active:not(:disabled) { transform: translateY(0); }
+        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      `}</style>
+
+      {/* Full-page dark canvas */}
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#0a0a0a",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "16px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* ── Login card ──────────────────────────────────────────── */}
+        <div
+          className="login-card"
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 340,
+            background: "#111111",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
+          {/* Spectrum bar at top of card */}
+          <div className="spectrum-bar" style={{ height: 2, width: "100%" }} />
+
+          <div style={{ padding: "28px 24px 24px" }}>
+
+            {/* ── Logo / Branding ─────────────────────────────────── */}
+            <div style={{ marginBottom: 28, textAlign: "center" }}>
+              {/* dm monogram */}
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 36,
+                  height: 36,
+                  marginBottom: 14,
+                  borderRadius: 8,
+                  background: "#fff",
+                  color: "#000",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  fontFamily: "var(--font-geist-mono), monospace",
+                  letterSpacing: "-0.02em",
+                  userSelect: "none",
+                }}
+              >
+                dm
+              </div>
+
+              <div>
+                <h1
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 600,
+                    letterSpacing: "-0.025em",
+                    color: "rgba(255,255,255,0.95)",
+                    margin: 0,
+                    fontFamily: "var(--font-geist-sans), sans-serif",
+                  }}
+                >
+                  DocuMind
+                </h1>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.35)",
+                    marginTop: 3,
+                    fontFamily: "var(--font-geist-sans), sans-serif",
+                  }}
+                >
+                  Enterprise Knowledge Assistant
+                </p>
+              </div>
+            </div>
+
+            {/* ── Form ────────────────────────────────────────────── */}
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <label
+                  htmlFor="username"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    letterSpacing: "0.02em",
+                    color: "rgba(255,255,255,0.45)",
+                    textTransform: "uppercase",
+                    fontFamily: "var(--font-geist-sans), sans-serif",
+                  }}
+                >
+                  Username
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onFocus={() => setFocusedField("username")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="username"
+                  required
+                  autoFocus
+                  autoComplete="username"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <label
+                  htmlFor="password"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 500,
+                    letterSpacing: "0.02em",
+                    color: "rgba(255,255,255,0.45)",
+                    textTransform: "uppercase",
+                    fontFamily: "var(--font-geist-sans), sans-serif",
+                  }}
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="password"
+                  required
+                  autoComplete="current-password"
+                  className="input-field"
+                />
+              </div>
+
+              {error && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    borderRadius: 7,
+                    background: "rgba(255,77,77,0.08)",
+                    border: "1px solid rgba(255,77,77,0.18)",
+                  }}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(255,100,100,0.9)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m15 9-6 6" />
+                    <path d="m9 9 6 6" />
+                  </svg>
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(255,100,100,0.9)",
+                      fontFamily: "var(--font-geist-sans), sans-serif",
+                    }}
+                  >
+                    {error}
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="submit-btn"
+                style={{ marginTop: 4 }}
+              >
+                {loading ? (
+                  <svg
+                    style={{
+                      animation: "spin-slow 0.8s linear infinite",
+                      display: "inline-block",
+                      width: 14,
+                      height: 14,
+                    }}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.2)" strokeWidth="3" />
+                    <path d="M4 12a8 8 0 018-8" stroke="#000" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  "Continue"
+                )}
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Login form */}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <label htmlFor="username" className="text-[12px] font-medium text-foreground/70">
-              Username
-            </label>
-            <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="username"
-              required
-              autoFocus
-              autoComplete="username"
-              className="h-9 rounded-md border-border text-[13px]"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="text-[12px] font-medium text-foreground/70">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="password"
-              required
-              autoComplete="current-password"
-              className="h-9 rounded-md border-border text-[13px]"
-            />
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-destructive/8 border border-destructive/20">
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-destructive shrink-0">
-                <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>
-              </svg>
-              <p className="text-[12px] text-destructive">{error}</p>
-            </div>
-          )}
-
-          <Button type="submit" className="w-full h-9 rounded-md text-[13px] font-medium mt-1" disabled={loading}>
-            {loading ? (
-              <svg
-                className="animate-spin h-3.5 w-3.5"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              "Continue"
-            )}
-          </Button>
-        </form>
-
         {/* Footer */}
-        <p className="text-center text-[11px] text-muted-foreground/40">
+        <p
+          style={{
+            position: "absolute",
+            bottom: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: 11,
+            color: "rgba(255,255,255,0.18)",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--font-geist-sans), sans-serif",
+          }}
+        >
           Acme Engineering &middot; Internal use only
         </p>
       </div>
-    </div>
+    </>
   );
 }

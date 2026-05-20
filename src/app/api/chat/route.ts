@@ -12,9 +12,9 @@ import { enforceChatRateLimit } from "@/lib/rate-limit/chat";
 import { randomUUID } from "crypto";
 
 // ── WHY NODE.JS, NOT EDGE ──────────────────────────────────────────────
-// The RAG pipeline uses fs.readFileSync to load markdown docs and needs
-// full Node for embedding operations. Edge would give faster TTFB but
-// can't run this workload. Knowing when NOT to use Edge matters.
+// The RAG pipeline queries Neon pgvector and runs embedding operations via
+// the AI Gateway — both require full Node.js. Edge would give faster TTFB
+// but can't run pg or crypto. Knowing when NOT to use Edge matters.
 export const runtime = "nodejs";
 
 // 60s covers: DB round-trip + rate limit + embedding + pgvector search +

@@ -1,7 +1,7 @@
 // ── WORKFLOW TRIGGER: CHAT MAINTENANCE ─────────────────────────────────
 //
 // Triggers the daily session pruning job. Called automatically by Vercel's
-// cron scheduler (daily 3am UTC via vercel.json). Can also be called
+// cron scheduler (daily 3am UTC via vercel.ts). Can also be called
 // manually with a custom daysToKeep value for one-off cleanup:
 //   POST /api/workflows/chat/maintenance { "daysToKeep": 7 }
 //

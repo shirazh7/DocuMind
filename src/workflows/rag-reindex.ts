@@ -12,7 +12,7 @@
 //   produce poor retrieval results.
 // - A previous partial ingest left the store in an inconsistent state.
 //
-// Scheduled weekly (Sunday 4am UTC via vercel.json cron) as a safety net.
+// Scheduled weekly (Sunday 4am UTC via vercel.ts cron) as a safety net.
 // IMPORTANT: this force-reindex intentionally excludes user-uploaded docs
 // (source prefix user-doc:) to avoid unbounded weekly costs as uploads grow.
 // User docs are re-embedded incrementally on upload/update workflows.

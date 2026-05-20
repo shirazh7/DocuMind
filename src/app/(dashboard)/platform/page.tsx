@@ -180,7 +180,7 @@ export default async function DemoPage() {
                 Last checked: {new Date().toISOString()}
               </p>
             </div>
-            <form action="/demo">
+            <form action="/platform">
               <button
                 type="submit"
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

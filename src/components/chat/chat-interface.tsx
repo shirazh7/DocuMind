@@ -34,7 +34,8 @@
 // DefaultChatTransport separates the streaming protocol from the hook —
 // you could swap to WebSockets or a custom transport without changing UI code.
 //
-// TODO(production): Add authentication check — redirect unauthenticated users.
+// Authentication is enforced at the edge by src/proxy.ts — unauthenticated
+// requests are redirected to /login before this component ever renders.
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";

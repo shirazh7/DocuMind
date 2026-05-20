@@ -1,7 +1,7 @@
 // ── CHAT MAINTENANCE WORKFLOW ───────────────────────────────────────────
 //
 // Prunes stale chat sessions and their cascade-deleted messages from Neon.
-// Scheduled daily at 3am UTC via vercel.json cron.
+// Scheduled daily at 3am UTC via vercel.ts cron.
 //
 // Why 30 days default: balances storage cost against user expectation of
 // "long-term" history. Enterprise deployments might want 90–365 days with

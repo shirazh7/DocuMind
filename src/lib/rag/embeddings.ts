@@ -11,10 +11,11 @@ import { TextChunk } from "./chunker";
 // embedMany batches in groups of 100 (OpenAI's limit per request).
 // embed handles single queries for real-time retrieval.
 //
-// TODO(production): Cache embeddings in Vercel KV or a managed vector DB to
-// avoid re-computing on every cold start.
-// TODO(production): Pin the embedding model version — if the model changes,
-// all stored embeddings must be regenerated for consistency.
+// Embeddings are persisted in Neon pgvector (src/lib/rag/store.ts) — chunks
+// are only re-embedded when missing or during an explicit reindex workflow run.
+// Cold starts do not trigger re-embedding.
+// NOTE: if EMBEDDING_MODEL changes, run the rag-reindex workflow to regenerate
+// all stored vectors — mixed-model embeddings are not comparable.
 
 export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 

@@ -1,9 +1,8 @@
 "use client";
 
-// TODO(production): Guard this layout with authentication middleware (e.g., NextAuth /
-// Clerk / Vercel Auth). Redirect unauthenticated users to a login page.
-// TODO(production): Inject user identity into React context here so child pages can
-// personalise content and the API routes can enforce per-user rate limits.
+// Authentication is enforced by src/proxy.ts before any dashboard route renders.
+// User identity is resolved via getCurrentUserId() (cookie + IP fallback) and
+// used by API routes to enforce per-user rate limits via Upstash.
 
 import { useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
