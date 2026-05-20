@@ -2,7 +2,7 @@
 
 // ── EVALUATION RUNNER ──────────────────────────────────────────────────
 //
-// Runs 21 test cases sequentially against the RAG system. Each test hits
+// Runs 19 test cases sequentially against the RAG system. Each test hits
 // /api/eval (which uses generateText, not streamText — blocking because
 // we need the complete response to run grounding checks).
 //

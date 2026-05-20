@@ -236,20 +236,7 @@ export function MessageBubble({ message, onCitationClick, isStreaming = false }:
               );
             }
 
-            // True when this is the last text part in the message — used to
-            // inject the inline cursor so it appears at the end of the final
-            // paragraph rather than floating as a separate element.
-            const isLastTextPart =
-              isStreaming &&
-              !message.parts.slice(i + 1).some((p) => p.type === "text");
-
-            // CSS ::after on the markdown wrapper targets the last <p> rendered
-            // by ReactMarkdown and appends an inline blinking block cursor.
-            // This keeps the cursor on the same text line as the last streamed
-            // word — no separate DOM element required.
-            const streamingCursorClass = isLastTextPart
-              ? "[&>p:last-child]:after:content-['▊'] [&>p:last-child]:after:animate-pulse [&>p:last-child]:after:ml-[1px] [&>p:last-child]:after:opacity-60 [&>p:last-child]:after:text-[0.7em] [&>p:last-child]:after:align-middle"
-              : "";
+            const streamingCursorClass = "";
 
             const hasCitations = /\[\d+\]/.test(part.text);
             if (hasCitations) {

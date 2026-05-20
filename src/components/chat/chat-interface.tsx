@@ -74,6 +74,7 @@ export function ChatInterface({ allowedModels }: ChatInterfaceProps) {
     null
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [followUpsDismissed, setFollowUpsDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Prevents auto-send from firing more than once (React Strict Mode double-invokes effects).
@@ -217,6 +218,21 @@ export function ChatInterface({ allowedModels }: ChatInterfaceProps) {
     }
     return [];
   }, [messages]);
+
+  // Reset dismissed state whenever a new set of follow-up questions arrives
+  // so the chips reappear after each response without the user needing to
+  // manually dismiss and re-trigger them.
+  const prevFollowUpsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const prev = prevFollowUpsRef.current;
+    if (
+      followUpQuestions.length > 0 &&
+      followUpQuestions.join("|") !== prev.join("|")
+    ) {
+      setFollowUpsDismissed(false);
+      prevFollowUpsRef.current = followUpQuestions;
+    }
+  }, [followUpQuestions]);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -486,20 +502,22 @@ export function ChatInterface({ allowedModels }: ChatInterfaceProps) {
                       "text" in p &&
                       (p as { text: string }).text.length > 0
                   );
+                // Show dots for the full streaming lifecycle — all three phases:
+                // 1. "submitted": waiting for first token (TTFT gap)
+                // 2. "streaming" + no text: tool-call / reasoning phase
+                // 3. "streaming" + text present: finalization phase while the
+                //    model generates the suggestFollowUps tool call.
+                // Keeping them alive through phase 3 prevents the "freeze"
+                // where text stops and nothing happens before pills appear.
+                // They disappear when status → "ready" (stream fully closed),
+                // which is exactly when the pills animate in — so there is
+                // never a gap and never a premature appearance of suggestions.
                 const showIndicator =
-                  status === "submitted" ||
-                  (status === "streaming" && !lastMsgHasText);
+                  status === "submitted" || status === "streaming";
                 if (!showIndicator) return null;
                 return (
                   <div className="flex justify-start pl-1">
-                    <div className="flex items-center gap-2 text-muted-foreground/60 text-[12px]">
-                      <div className="flex gap-[3px]">
-                        <span className="h-1 w-1 rounded-full bg-foreground/40 animate-bounce [animation-delay:-0.3s]" />
-                        <span className="h-1 w-1 rounded-full bg-foreground/40 animate-bounce [animation-delay:-0.15s]" />
-                        <span className="h-1 w-1 rounded-full bg-foreground/40 animate-bounce" />
-                      </div>
-                      Thinking…
-                    </div>
+                    <span className="h-2.5 w-2.5 rounded-full bg-foreground/70 animate-pulse" />
                   </div>
                 );
               })()}
@@ -544,23 +562,48 @@ export function ChatInterface({ allowedModels }: ChatInterfaceProps) {
         </div>
 
         {/* Follow-up question chips ───────────────────────────────────────
-            Shown only when idle (status === "ready") and the last assistant
-            message included a suggestFollowUps tool call. Clicking a chip
-            sends it immediately — no typing required to explore the
-            knowledge base further. Chips disappear the moment a new message is
-            sent (status leaves "ready"), preventing stale suggestions. */}
-        {status === "ready" && followUpQuestions.length > 0 && (
-          <div className="px-4 pb-3">
-            <div className="max-w-3xl mx-auto flex flex-wrap gap-2">
-              {followUpQuestions.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleSend(q)}
-                  className="text-[12px] px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted transition-all duration-100"
+            Appear as soon as the suggestFollowUps tool output lands in the
+            stream — before the stream fully closes. Previously gated on
+            status === "ready" which added a noticeable freeze: the tool
+            output was already available but the pills waited for stream
+            teardown. Now they animate in immediately with a subtle
+            slide-up fade so the transition feels intentional, not abrupt.
+            handleSend() returns early when isActive, so clicking a chip
+            mid-stream is a harmless no-op if the stream isn't quite done. */}
+        {status === "ready" && followUpQuestions.length > 0 && !followUpsDismissed && (
+          <div className="px-4 pb-3 animate-in fade-in slide-in-from-bottom-1 duration-300">
+            <div className="max-w-3xl mx-auto flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 flex-1">
+                {followUpQuestions.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => handleSend(q)}
+                    className="text-[12px] px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 hover:bg-muted transition-all duration-100"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFollowUpsDismissed(true)}
+                aria-label="Dismiss suggestions"
+                className="shrink-0 p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground hover:bg-accent transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  {q}
-                </button>
-              ))}
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
             </div>
           </div>
         )}

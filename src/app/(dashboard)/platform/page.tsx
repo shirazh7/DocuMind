@@ -8,7 +8,7 @@
 //   Service Wiring   — env var presence for each Vercel integration
 //   Data & Retrieval — real row counts from Neon (RAG chunks, uploads,
 //                      chat sessions)
-//   Workflow Automation — cron schedules from vercel.json, WAF rule status
+//   Workflow Automation — cron schedules from vercel.ts, WAF rule status
 //
 // The "Refresh" action re-runs the server component. It is rate-limited
 // via lib/rate-limit/demo.ts (30 req/min) to prevent the Neon/Redis
@@ -20,9 +20,8 @@ import { getCurrentUserId } from "@/lib/auth/user-id";
 import { ensureDatabaseSchema } from "@/lib/db/schema";
 import { getDb } from "@/lib/db/client";
 import { enforceDemoRefreshRateLimit } from "@/lib/rate-limit/demo";
-import { readFile } from "fs/promises";
-import path from "path";
 import { MODELS, DEFAULT_MODEL_ID } from "@/lib/ai/models";
+import { config as vercelTsConfig } from "../../../../vercel";
 
 export const runtime = "nodejs";
 
@@ -98,13 +97,10 @@ export default async function DemoPage() {
     flags: Boolean(process.env.FLAGS),
   };
 
-  let vercelConfig: VercelConfigFile | null = null;
-  try {
-    const raw = await readFile(path.join(process.cwd(), "vercel.json"), "utf8");
-    vercelConfig = JSON.parse(raw) as VercelConfigFile;
-  } catch {
-    vercelConfig = null;
-  }
+  // Read cron and route configuration directly from vercel.ts (the source of
+  // truth after migrating from vercel.json). The config object is statically
+  // imported so this always reflects the deployed configuration.
+  const vercelConfig = vercelTsConfig as unknown as VercelConfigFile;
 
   const cronRules =
     vercelConfig?.crons?.filter((cron) => cron.path && cron.schedule) ?? [];
@@ -329,7 +325,7 @@ export default async function DemoPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No cron rules found in vercel.json.</p>
+            <p className="text-sm text-muted-foreground">No cron rules found in vercel.ts.</p>
           )}
           <div className="mt-3 rounded-lg border border-border p-3 flex items-center justify-between text-sm">
             <span>Workflow WAF rule (requires x-vercel-cron)</span>

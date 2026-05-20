@@ -47,7 +47,23 @@ export function ModelSelector({
           className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[12px] font-mono rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 tracking-tight text-foreground/70 hover:text-foreground"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span className="text-foreground/40">Model</span>
+          <span className="text-foreground/20">/</span>
           {currentModel.name}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="ml-0.5 opacity-50"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           {models.map((model) => (

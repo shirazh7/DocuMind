@@ -477,7 +477,34 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
 
         {/* Bottom */}
         <div className="border-t border-sidebar-border px-3 py-3 flex items-center justify-between shrink-0">
-          <ThemeToggle />
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <button
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.href = "/login";
+              }}
+              title="Sign out"
+              aria-label="Sign out"
+              className="flex items-center justify-center h-7 w-7 rounded-md text-sidebar-foreground/35 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" x2="9" y1="12" y2="12" />
+              </svg>
+            </button>
+          </div>
           <span className="text-[11px] text-sidebar-foreground/25 font-mono tracking-tight">
             v0.1
           </span>

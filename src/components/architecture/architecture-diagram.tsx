@@ -42,7 +42,7 @@ const NODE_DETAILS: Record<string, NodeDetail> = {
   },
   "eval-suite": {
     file: "src/components/eval/eval-runner.tsx",
-    description: "Runs 21 test cases sequentially against /api/eval, with 500ms delay for rate limiting. Checks grounding via substring matching of expected facts.",
+    description: "Runs 19 test cases sequentially against /api/eval, with 500ms delay between requests to avoid rate limiting. Checks grounding via substring matching of expected facts. Gated behind the eval-suite-enabled Vercel Flag to prevent accidental production runs.",
     sdkImports: [],
     sdkUsage: [
       { fn: "POST /api/eval", purpose: "Calls generateText on the server; client receives { answer, sources, latency }" },
@@ -51,33 +51,38 @@ const NODE_DETAILS: Record<string, NodeDetail> = {
   },
   "api-chat": {
     file: "src/app/api/chat/route.ts",
-    description: "The main chat API route. Uses streamText for streaming responses with tool calling and sends cost metadata back to the client.",
+    description: "Main chat route. Enforces Upstash rate limiting before the LLM call, persists messages to Neon on stream completion, and streams cost metadata back to the client. Abort signal propagation cancels the Gateway call if the client disconnects.",
     sdkImports: [
       "streamText from ai",
       "convertToModelMessages from ai",
       "stepCountIs from ai",
+      "smoothStream from ai",
+      "consumeStream from ai",
     ],
     sdkUsage: [
-      { fn: "streamText()", purpose: "Streams LLM response with { model, system, messages, tools, stopWhen }" },
+      { fn: "enforceChatRateLimit()", purpose: "Upstash sliding window check — returns 429 with X-RateLimit-* headers if exceeded" },
+      { fn: "streamText()", purpose: "Streams LLM response with { model, system, messages, tools, stopWhen: stepCountIs(5) }" },
+      { fn: "smoothStream({ delayInMs: 20 })", purpose: "Buffers raw token chunks and re-emits word-by-word — prevents choppy UI updates from large Claude batches" },
       { fn: "convertToModelMessages()", purpose: "Converts UIMessage[] from the client into the model's message format" },
-      { fn: "stepCountIs(3)", purpose: "Stops after 3 tool-calling steps (retrieve → synthesize → optionally retrieve more)" },
-      { fn: "toUIMessageStreamResponse()", purpose: "Returns the stream with messageMetadata callback for cost tracking" },
-      { fn: "messageMetadata", purpose: "Sends { modelId } on 'start' and { totalUsage, estimatedCost } on 'finish'" },
+      { fn: "stepCountIs(5)", purpose: "5 steps: retrieve → refine+retrieve → answer → follow-ups. Claude reasoning needs the extra headroom" },
+      { fn: "toUIMessageStreamResponse({ sendReasoning: true })", purpose: "Forwards reasoning tokens (Claude Sonnet 4.5) as part.type === 'reasoning' parts for the Thought block" },
+      { fn: "messageMetadata", purpose: "Sends { modelId, sessionId } on 'start' and { totalUsage, estimatedCost, durationMs } on 'finish'" },
+      { fn: "onFinish → replaceChatMessages()", purpose: "Persists the complete message array to Neon chat_messages after stream completes" },
     ],
-    keyCode: `const result = streamText({
-  model: validModelId,        // "openai/gpt-4.1-nano"
-  system: SYSTEM_PROMPT,
+    keyCode: `await enforceChatRateLimit(userId); // Upstash 429 guard
+
+const result = streamText({
+  model: validModelId,   // "openai/gpt-4.1-nano" via Gateway
   messages: await convertToModelMessages(messages),
   tools: documentTools,
-  stopWhen: stepCountIs(3),
+  stopWhen: stepCountIs(5),
+  experimental_transform: smoothStream({ delayInMs: 20 }),
+  abortSignal: req.signal, // cancel Gateway if client leaves
 });
 
 return result.toUIMessageStreamResponse({
-  messageMetadata: ({ part }) => {
-    if (part.type === "finish") {
-      return { totalUsage: part.totalUsage, estimatedCost };
-    }
-  },
+  sendReasoning: true,     // Claude Sonnet 4.5 Thought block
+  onFinish: ({ messages }) => replaceChatMessages(sessionId, messages),
 });`,
   },
   "api-eval": {
@@ -138,19 +143,25 @@ return result.toUIMessageStreamResponse({
   },
   "model-config": {
     file: "src/lib/ai/models.ts",
-    description: "Model configuration using Vercel AI Gateway plain string model IDs (no @ai-sdk/openai import needed). Includes cost-per-token for usage tracking.",
+    description: "Three models via Vercel AI Gateway plain string IDs — no provider SDK imports. Claude Sonnet 4.5 is gated behind the premium-model-enabled Vercel Flag and supports extended thinking (reasoning tokens). Cost-per-token is hardcoded for estimatedCost calculation streamed to the client.",
     sdkImports: [],
     sdkUsage: [
-      { fn: "Plain string model IDs", purpose: "\"openai/gpt-4.1-nano\" and \"openai/gpt-4o-mini\" — gateway routes automatically" },
-      { fn: "getModelCost()", purpose: "Returns { inputPerToken, outputPerToken } for estimatedCost calculation" },
+      { fn: "Plain string model IDs", purpose: "\"openai/gpt-4.1-nano\", \"openai/gpt-4o-mini\", \"anthropic/claude-sonnet-4-5\" — gateway routes automatically" },
+      { fn: "supportsThinking: true", purpose: "Signals the API route to inject providerOptions.anthropic.thinking for Claude's extended thinking mode" },
+      { fn: "getModelCost()", purpose: "Returns { inputPerToken, outputPerToken } for estimatedCost calculation streamed per message" },
     ],
-    keyCode: `"openai/gpt-4.1-nano": {
-  inputPerToken:  0.1  / 1_000_000,  // $0.10/1M
-  outputPerToken: 0.4  / 1_000_000,  // $0.40/1M
+    keyCode: `"openai/gpt-4.1-nano": {       // default, cheapest
+  inputPerToken:  0.1  / 1_000_000,
+  outputPerToken: 0.4  / 1_000_000,
 }
-"openai/gpt-4o-mini": {
-  inputPerToken:  0.15 / 1_000_000,  // $0.15/1M
-  outputPerToken: 0.6  / 1_000_000,  // $0.60/1M
+"openai/gpt-4o-mini": {        // flag-gated
+  inputPerToken:  0.15 / 1_000_000,
+  outputPerToken: 0.6  / 1_000_000,
+}
+"anthropic/claude-sonnet-4-5": { // flag-gated, reasoning
+  inputPerToken:  3    / 1_000_000,
+  outputPerToken: 15   / 1_000_000,
+  supportsThinking: true,
 }`,
   },
   "chunker": {
@@ -233,6 +244,106 @@ const { embedding } = await embed({
     sdkUsage: [
       { fn: "cosineSimilarity()", purpose: "Imported from 'ai' in retriever.ts — computes similarity between query and chunk embeddings" },
     ],
+  },
+  "rate-limiter": {
+    file: "src/lib/rate-limit/chat.ts",
+    description: "Upstash Redis sliding window rate limiter protecting /api/chat. 20 requests/minute per user ID. Returns HTTP 429 with X-RateLimit-Limit and X-RateLimit-Remaining headers. Fails open (allows request) when Upstash credentials are absent — rate limiting is spend control, not a security gate.",
+    sdkImports: ["@upstash/ratelimit", "@upstash/redis"],
+    sdkUsage: [
+      { fn: "Ratelimit.slidingWindow(20, '1 m')", purpose: "Sliding window prevents edge-burst that fixed windows allow (20 req at :59 + 20 req at :00)" },
+      { fn: "limiter.limit(userId)", purpose: "Returns { success, limit, remaining, reset } — caller returns 429 when success is false" },
+      { fn: "analytics: true", purpose: "Enables Upstash's request analytics dashboard at no extra cost" },
+    ],
+    keyCode: `const ratelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "1 m"),
+  analytics: true,
+  prefix: "documind:chat",
+});
+
+const result = await ratelimit.limit(userId);
+if (!result.success) return new Response(null, { status: 429 });`,
+  },
+  "chat-persistence": {
+    file: "src/lib/chat/persistence.ts",
+    description: "Neon Postgres persistence for chat sessions and messages. History survives page refreshes, cold starts, and redeploys. Replace-all write pattern: on each stream completion, DELETE existing rows + re-INSERT the full message array. ON DELETE CASCADE means deleting a session also removes all its messages.",
+    sdkImports: [],
+    sdkUsage: [
+      { fn: "ensureChatSession()", purpose: "Upserts the session row before rate limiting — ensures it exists even if the request is later rejected" },
+      { fn: "replaceChatMessages()", purpose: "Called in onFinish: deletes all messages for session, re-inserts full completed array with sort_order" },
+      { fn: "listChatSessions()", purpose: "Returns last 20 sessions per user (title + updated_at) for the sidebar history list" },
+      { fn: "pruneStaleChatSessions()", purpose: "Called by daily chatMaintenanceWorkflow — removes sessions + messages older than 30 days" },
+    ],
+    keyCode: `CREATE TABLE chat_sessions (id, user_id, title, updated_at);
+CREATE TABLE chat_messages (
+  id, session_id REFERENCES chat_sessions ON DELETE CASCADE,
+  sort_order, role, parts JSONB, metadata JSONB,
+  UNIQUE (session_id, sort_order)
+);`,
+  },
+  "workflows": {
+    file: "src/workflows/*.ts",
+    description: "Four Vercel Workflows using 'use workflow' / 'use step' directives. Steps have automatic retry and durable checkpointing — a transient network failure restarts only the failed step. Cron triggers are scheduled in vercel.ts and protected: the /api/workflows/* route denies requests missing the x-vercel-cron header.",
+    sdkImports: ["workflow package — 'use workflow' / 'use step' directives"],
+    sdkUsage: [
+      { fn: "ragIngestWorkflow", purpose: "Manual trigger: loads static docs → chunks → embeds via Gateway → upserts to Neon pgvector" },
+      { fn: "ragReindexWorkflow", purpose: "Weekly cron (Sun 4am UTC): force-clears static chunks and re-embeds from scratch for freshness" },
+      { fn: "chatMaintenanceWorkflow", purpose: "Daily cron (3am UTC): prunes Neon chat sessions + messages older than 30 days via CASCADE delete" },
+      { fn: "docIngestWorkflow", purpose: "Per-upload trigger: chunks, embeds, and upserts a single user-uploaded document to pgvector" },
+    ],
+    keyCode: `export async function ragIngestWorkflow(force = false) {
+  "use workflow";
+  await runIngestionStep(force); // "use step" — auto-retry
+}
+
+// vercel.ts schedules crons + blocks external callers:
+// mitigate: { action: "deny" } on /api/workflows/*
+// unless x-vercel-cron header is present`,
+  },
+  "vercel-blob": {
+    file: "src/app/api/documents/route.ts",
+    description: "User-uploaded documents (PDF, DOCX, Markdown) are stored in Vercel Blob. Only raw file bytes go to Blob; operational metadata (filename, slug, status, user_id, extracted_text) is stored in Neon so it can be queried, indexed, and status-tracked.",
+    sdkImports: ["@vercel/blob"],
+    sdkUsage: [
+      { fn: "put(filename, file, { access: 'public' })", purpose: "Stores the raw file bytes in Vercel Blob, returns a blob_url stored in Neon user_documents table" },
+    ],
+    keyCode: `const blob = await put(filename, file, {
+  access: "public",
+  contentType: file.type,
+});
+// blob.url stored in Neon user_documents
+// docIngestWorkflow(documentId) triggered after upload`,
+  },
+  "flags": {
+    file: "src/flags.ts",
+    description: "Vercel Flags SDK controls model availability and eval page access. Evaluated server-side in page/layout components — clients only receive the resulting boolean, never the flag logic. Auto-reports every evaluation to Vercel Web Analytics for rollout observability.",
+    sdkImports: ["flag from flags/next", "vercelAdapter from @flags-sdk/vercel"],
+    sdkUsage: [
+      { fn: "premiumModelEnabled", purpose: "OFF: only GPT-4.1 Nano. ON: GPT-4o Mini and Claude Sonnet 4.5 (with reasoning trace) appear in model selector" },
+      { fn: "evalSuiteEnabled", purpose: "Gates the /eval page — prevents accidental production runs that burn AI Gateway credits" },
+    ],
+    keyCode: `export const premiumModelEnabled = flag<boolean>({
+  key: "premium-model-enabled",
+  adapter: vercelAdapter(), // reads Vercel Dashboard flag state
+  defaultValue: false,      // safe default — no surprise spend
+});`,
+  },
+  "claude-sonnet": {
+    file: "via Vercel AI Gateway",
+    description: "Claude Sonnet 4.5 — premium model at $3/$15 per 1M tokens. Supports Anthropic extended thinking: reasoning tokens stream to the client and render as a collapsible 'Thought' block in the UI (the v0 pattern). Gated behind the premium-model-enabled Vercel Flag.",
+    sdkImports: [],
+    sdkUsage: [
+      { fn: "providerOptions.anthropic.thinking", purpose: "Enables extended thinking with budgetTokens: 8000 — caps reasoning cost per request" },
+      { fn: "sendReasoning: true", purpose: "Forwards reasoning tokens to client as part.type === 'reasoning' parts for the Thought block UI" },
+    ],
+    keyCode: `// injected when model.supportsThinking === true
+providerOptions: {
+  anthropic: {
+    thinking: { type: "enabled", budgetTokens: 8000 },
+  },
+}
+// toUIMessageStreamResponse({ sendReasoning: true })
+// → part.type === 'reasoning' → collapsible Thought block`,
   },
 };
 
@@ -595,16 +706,31 @@ export function ArchitectureDiagram() {
               <div className="flex flex-wrap items-center gap-3 justify-center">
                 {n("chat-ui", <IconChat />, "Chat UI", "useChat + streaming", blue)}
                 {n("kb", <IconBook />, "Knowledge Base", "Browse & search docs", blue)}
-                {n("eval-suite", <IconCheck />, "Eval Suite", "21 test cases", blue)}
+                {n("eval-suite", <IconCheck />, "Eval Suite", "19 test cases", blue)}
               </div>
             </LayerZone>
 
             <ConnectorArrow />
 
             <LayerZone label="API Layer" labelColor="text-violet-600 dark:text-violet-400" borderColor="border-violet-500/20" bgColor="bg-violet-500/[0.03]">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3 justify-center">
+                  {n("api-chat", <IconStream />, "POST /api/chat", "streamText() + rate limit", violet)}
+                  {n("api-eval", <IconCpu />, "POST /api/eval", "generateText()", violet)}
+                </div>
+                <div className="flex flex-wrap items-center gap-3 justify-center">
+                  {n("rate-limiter", <IconDb />, "Rate Limiter", "Upstash · 20 req/min", violet)}
+                  {n("chat-persistence", <IconDb />, "Chat Persistence", "Neon · sessions + messages", violet)}
+                </div>
+              </div>
+            </LayerZone>
+
+            <ConnectorArrow />
+
+            <LayerZone label="Workflow Layer" labelColor="text-rose-600 dark:text-rose-400" borderColor="border-rose-500/20" bgColor="bg-rose-500/[0.03]">
               <div className="flex flex-wrap items-center gap-3 justify-center">
-                {n("api-chat", <IconStream />, "POST /api/chat", "streamText()", violet)}
-                {n("api-eval", <IconCpu />, "POST /api/eval", "generateText()", violet)}
+                {n("workflows", <IconSplit />, "Vercel Workflows", "4 durable pipelines + crons", "border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300")}
+                {n("flags", <IconCheck />, "Feature Flags", "Vercel Flags SDK · model gating", "border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300")}
               </div>
             </LayerZone>
 
@@ -614,7 +740,7 @@ export function ArchitectureDiagram() {
               <div className="flex flex-wrap items-center gap-3 justify-center">
                 {n("retrieve-tool", <IconTool />, "retrieveDocuments", "Tool calling + Zod schema", emerald)}
                 {n("system-prompt", <IconPrompt />, "System Prompt", "6 rules, citation format", emerald)}
-                {n("model-config", <IconCpu />, "Model Config", "GPT-4.1 Nano / 4o Mini", emerald)}
+                {n("model-config", <IconCpu />, "Model Config", "Nano / 4o Mini / Claude", emerald)}
               </div>
             </LayerZone>
 
@@ -629,8 +755,9 @@ export function ArchitectureDiagram() {
                   <HArrow />
                   {n("vector-store", <IconDb />, "Vector Store", "Neon pgvector, persistent", amber)}
                 </div>
-                <div className="flex justify-center">
-                  {n("markdown-docs", <IconFile />, "5 Markdown Documents", "Deployment, Incidents, Auth, Onboarding, DB", amber)}
+                <div className="flex flex-wrap items-center gap-3 justify-center">
+                  {n("markdown-docs", <IconFile />, "5 Markdown Docs", "Deployment, Incidents, Auth, Onboarding, DB", amber)}
+                  {n("vercel-blob", <IconFile />, "User Uploads", "Vercel Blob · PDF/DOCX/MD", amber)}
                 </div>
               </div>
             </LayerZone>
@@ -645,6 +772,7 @@ export function ArchitectureDiagram() {
                 <div className="flex flex-wrap items-center gap-3 justify-center">
                   {n("gpt-nano", <IconBrain />, "GPT-4.1 Nano", "$0.10 / $0.40 per 1M", slate)}
                   {n("gpt-mini", <IconBrain />, "GPT-4o Mini", "$0.15 / $0.60 per 1M", slate)}
+                  {n("claude-sonnet", <IconBrain />, "Claude Sonnet 4.5", "$3 / $15 per 1M · thinking", slate)}
                   {n("embed-model", <IconEmbed />, "text-embedding-3-small", "1536 dimensions", slate)}
                 </div>
               </div>
@@ -666,6 +794,9 @@ export function ArchitectureDiagram() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-violet-500/30" /> API
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-rose-500/30" /> Workflows
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500/30" /> AI
